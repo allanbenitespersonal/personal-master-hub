@@ -31,6 +31,9 @@ const DIAS_SEMANA = [
   { id: '6', label: 'Sáb' },
 ];
 
+const MODALIDADES = ['Consultoria', 'Híbrido', 'Presencial'];
+const SEXO_OPTIONS = ['Masculino', 'Feminino', 'Outro', 'Não informado'];
+
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
@@ -49,8 +52,8 @@ export default function App() {
 
   // Formulários
   const [newStudent, setNewStudent] = useState({ 
-    name: '', whatsapp: '', email: '', birthdate: '', unit: UNIDADES[0], 
-    packtotal: 4, fixed_days: [], fixed_time: '08:00', cycle_type: 'mês_vigente', due_day: 5 
+    name: '', whatsapp: '', email: '', birthdate: '', gender: 'Feminino', modality: 'Presencial',
+    unit: UNIDADES[0], packtotal: 4, fixed_days: [], fixed_time: '08:00', cycle_type: 'mês_vigente', due_day: 5 
   });
   const [newSchedule, setNewSchedule] = useState({ studentid: '', date: new Date().toISOString().split('T')[0], time: '08:00', unit: UNIDADES[0] });
   const [rescheduleData, setRescheduleData] = useState({ date: '', time: '' });
@@ -90,6 +93,8 @@ export default function App() {
         whatsapp: student.whatsapp || '',
         email: student.email || '',
         birthdate: student.birthdate || '',
+        gender: student.gender || 'Feminino',
+        modality: student.modality || 'Presencial',
         unit: student.unit || UNIDADES[0],
         packtotal: student.packtotal || 4,
         fixed_days: student.fixed_days ? student.fixed_days.split(',') : [],
@@ -100,8 +105,8 @@ export default function App() {
     } else {
       setEditingStudentId(null);
       setNewStudent({ 
-        name: '', whatsapp: '', email: '', birthdate: '', unit: UNIDADES[0], 
-        packtotal: 4, fixed_days: [], fixed_time: '08:00', cycle_type: 'mês_vigente', due_day: 5 
+        name: '', whatsapp: '', email: '', birthdate: '', gender: 'Feminino', modality: 'Presencial',
+        unit: UNIDADES[0], packtotal: 4, fixed_days: [], fixed_time: '08:00', cycle_type: 'mês_vigente', due_day: 5 
       });
     }
     setShowStudentModal(true);
@@ -246,7 +251,6 @@ export default function App() {
     alert('Chave Pix copiada para a área de transferência!');
   };
 
-  // Verificar atraso de 15 minutos
   const isDelayed = (dateStr, timeStr, status) => {
     if (status !== 'pending') return false;
     const classTime = new Date(`${dateStr}T${timeStr}`);
@@ -401,10 +405,16 @@ export default function App() {
                         <div className="flex items-center gap-2">
                           <h3 className="font-bold text-slate-900">{st.name}</h3>
                           {!isActive && <span className="bg-slate-200 text-slate-600 text-[10px] font-bold px-2 py-0.5 rounded">Inativo</span>}
+                          {st.modality && (
+                            <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                              {st.modality}
+                            </span>
+                          )}
                         </div>
-                        <p className="text-xs text-slate-500">{st.unit} • {st.whatsapp}</p>
+                        <p className="text-xs text-slate-500 mt-1">{st.unit} • {st.whatsapp}</p>
+                        <p className="text-xs text-slate-400">{st.email}</p>
                         {st.fixed_days && (
-                          <p className="text-[11px] text-indigo-600 font-medium mt-0.5">
+                          <p className="text-[11px] text-indigo-600 font-medium mt-1">
                             Grade Fixa: {st.fixed_days} às {st.fixed_time}
                           </p>
                         )}
@@ -471,7 +481,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Configuração do Pix */}
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
               <h3 className="text-sm font-bold text-slate-800">Sua Chave Pix para Cobrança</h3>
               <form onSubmit={handleSavePix} className="flex gap-2">
@@ -492,66 +501,109 @@ export default function App() {
         )}
       </main>
 
-      {/* --- MODAL CADASTRO / EDIÇÃO DE ALUNO --- */}
+      {/* --- MODAL CADASTRO / EDIÇÃO DE ALUNO (ATUALIZADO) --- */}
       {showStudentModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl p-5 w-full max-w-sm space-y-4 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-bold text-slate-900">{editingStudentId ? 'Editar Aluno' : 'Novo Aluno'}</h3>
+            <h3 className="text-lg font-bold text-slate-900">{editingStudentId ? 'Editar Cliente' : 'Novo Cliente'}</h3>
             <form onSubmit={handleSaveStudent} className="space-y-3">
-              <input required type="text" placeholder="Nome Completo" value={newStudent.name} onChange={e => setNewStudent({...newStudent, name: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" />
-              <input required type="tel" placeholder="WhatsApp (DDD + Número)" value={newStudent.whatsapp} onChange={e => setNewStudent({...newStudent, whatsapp: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" />
-              <input required type="date" value={newStudent.birthdate} onChange={e => setNewStudent({...newStudent, birthdate: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" />
-              
-              <label className="text-xs font-bold text-slate-700 block">Unidade Principal</label>
-              <select value={newStudent.unit} onChange={e => setNewStudent({...newStudent, unit: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm">
-                {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
-              </select>
-
-              <label className="text-xs font-bold text-slate-700 block">Pacote Contratado</label>
-              <select value={newStudent.packtotal} onChange={e => setNewStudent({...newStudent, packtotal: Number(e.target.value)})} className="w-full p-2.5 border rounded-xl text-sm">
-                {PACK_OPTIONS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-              </select>
-
-              <label className="text-xs font-bold text-slate-700 block">Dias da Grade Fixa</label>
-              <div className="flex gap-1">
-                {DIAS_SEMANA.map(d => {
-                  const selected = newStudent.fixed_days.includes(d.label);
-                  return (
-                    <button 
-                      type="button" 
-                      key={d.id} 
-                      onClick={() => {
-                        const days = selected ? newStudent.fixed_days.filter(x => x !== d.label) : [...newStudent.fixed_days, d.label];
-                        setNewStudent({...newStudent, fixed_days: days});
-                      }}
-                      className={`flex-1 py-1.5 text-xs font-bold rounded-lg border ${selected ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 text-slate-600'}`}
-                    >
-                      {d.label}
-                    </button>
-                  );
-                })}
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Nome</label>
+                <input required type="text" placeholder="Nome Completo" value={newStudent.name} onChange={e => setNewStudent({...newStudent, name: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" />
               </div>
 
-              <label className="text-xs font-bold text-slate-700 block">Horário Fixo</label>
-              <input type="time" value={newStudent.fixed_time} onChange={e => setNewStudent({...newStudent, fixed_time: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" />
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">E-mail</label>
+                <input required type="email" placeholder="email@exemplo.com" value={newStudent.email} onChange={e => setNewStudent({...newStudent, email: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Telefone (WhatsApp)</label>
+                <input required type="tel" placeholder="+55 (51) 99999-9999" value={newStudent.whatsapp} onChange={e => setNewStudent({...newStudent, whatsapp: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" />
+              </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-xs font-bold text-slate-700 block">Dia Vencimento</label>
-                  <input type="number" min="1" max="31" value={newStudent.due_day} onChange={e => setNewStudent({...newStudent, due_day: Number(e.target.value)})} className="w-full p-2.5 border rounded-xl text-sm" />
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Sexo</label>
+                  <select value={newStudent.gender} onChange={e => setNewStudent({...newStudent, gender: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm">
+                    {SEXO_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-slate-700 block">Tipo de Ciclo</label>
-                  <select value={newStudent.cycle_type} onChange={e => setNewStudent({...newStudent, cycle_type: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm">
-                    <option value="mês_vigente">Mês Vigente</option>
-                    <option value="30_dias">30 Dias Corridos</option>
-                  </select>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Data de Nascimento</label>
+                  <input required type="date" value={newStudent.birthdate} onChange={e => setNewStudent({...newStudent, birthdate: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Turmas / Modalidade</label>
+                <div className="flex gap-2">
+                  {MODALIDADES.map(m => {
+                    const selected = newStudent.modality === m;
+                    return (
+                      <button 
+                        type="button" 
+                        key={m} 
+                        onClick={() => setNewStudent({...newStudent, modality: m})}
+                        className={`flex-1 py-2 text-xs font-bold rounded-xl border transition ${selected ? 'bg-indigo-600 text-white border-indigo-600 shadow' : 'bg-slate-50 text-slate-600 border-slate-200'}`}
+                      >
+                        {m}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Unidade Principal</label>
+                <select value={newStudent.unit} onChange={e => setNewStudent({...newStudent, unit: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm">
+                  {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Pacote Contratado</label>
+                <select value={newStudent.packtotal} onChange={e => setNewStudent({...newStudent, packtotal: Number(e.target.value)})} className="w-full p-2.5 border rounded-xl text-sm">
+                  {PACK_OPTIONS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Dias da Grade Fixa</label>
+                <div className="flex gap-1">
+                  {DIAS_SEMANA.map(d => {
+                    const selected = newStudent.fixed_days.includes(d.label);
+                    return (
+                      <button 
+                        type="button" 
+                        key={d.id} 
+                        onClick={() => {
+                          const days = selected ? newStudent.fixed_days.filter(x => x !== d.label) : [...newStudent.fixed_days, d.label];
+                          setNewStudent({...newStudent, fixed_days: days});
+                        }}
+                        className={`flex-1 py-1.5 text-xs font-bold rounded-lg border ${selected ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 text-slate-600'}`}
+                      >
+                        {d.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Horário Fixo</label>
+                  <input type="time" value={newStudent.fixed_time} onChange={e => setNewStudent({...newStudent, fixed_time: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Dia Vencimento</label>
+                  <input type="number" min="1" max="31" value={newStudent.due_day} onChange={e => setNewStudent({...newStudent, due_day: Number(e.target.value)})} className="w-full p-2.5 border rounded-xl text-sm" />
                 </div>
               </div>
 
               <div className="flex gap-2 pt-2">
                 <button type="button" onClick={() => setShowStudentModal(false)} className="w-1/2 py-2.5 border rounded-xl text-sm font-bold text-slate-600">Cancelar</button>
-                <button type="submit" className="w-1/2 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold">Salvar</button>
+                <button type="submit" className="w-1/2 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold">Salvar Cliente</button>
               </div>
             </form>
           </div>
