@@ -1,16 +1,25 @@
 import React, { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
 
-const UNIDADES = ['Unidade Central', 'Jardim Lindóia', 'Moinhos de Vento', 'Atendimento Domiciliar'];
+// --- CONFIGURAÇÃO DO SUPABASE ---
+const SUPABASE_URL = 'https://hagwcvhsizwovxqgbmin.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_eS7_vdQBFvMEAuhExjj7TQ_VdRQXQuE';
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// --- UNIDADES ATUALIZADAS ---
+const UNIDADES = [
+  'EC Grand Park',
+  'EC Alvorada',
+  'MF São João',
+  'MF Country',
+  'Atendimento Domiciliar'
+];
+
 const PACK_OPTIONS = [
   { label: '4 Aulas (1x/semana)', value: 4, price: 400 },
   { label: '8 Aulas (2x/semana)', value: 8, price: 700 },
   { label: '12 Aulas (3x/semana)', value: 12, price: 950 },
   { label: '20 Aulas (5x/semana)', value: 20, price: 1400 },
-];
-
-const INITIAL_STUDENTS = [
-  { id: '1', name: 'Carlos Silva', whatsapp: '51999999999', email: 'carlos@email.com', birthDate: '1990-05-12', unit: 'Jardim Lindóia', packTotal: 8, classesDone: 5, vouchers: 1, paymentPending: false },
-  { id: '2', name: 'Mariana Souza', whatsapp: '51988888888', email: 'mariana@email.com', birthDate: '1985-08-20', unit: 'Unidade Central', packTotal: 12, classesDone: 10, vouchers: 0, paymentPending: true },
 ];
 
 export default function App() {
@@ -26,23 +35,21 @@ export default function App() {
   const [newStudent, setNewStudent] = useState({ name: '', whatsapp: '', email: '', birthDate: '', unit: UNIDADES[0], packTotal: 4 });
   const [newSchedule, setNewSchedule] = useState({ studentId: '', date: new Date().toISOString().split('T')[0], time: '08:00', unit: UNIDADES[0] });
 
+  // Carregar dados em tempo real do Supabase
   useEffect(() => {
-    const localStudents = localStorage.getItem('personal_students');
-    const localSchedules = localStorage.getItem('personal_schedules');
-    
-    if (localStudents) setStudents(JSON.parse(localStudents));
-    else setStudents(INITIAL_STUDENTS);
-
-    if (localSchedules) setSchedules(JSON.parse(localSchedules));
+    fetchStudents();
+    fetchSchedules();
   }, []);
 
-  useEffect(() => {
-    if (students.length > 0) localStorage.setItem('personal_students', JSON.stringify(students));
-  }, [students]);
+  const fetchStudents = async () => {
+    const { data } = await supabase.from('students').select('*');
+    if (data) setStudents(data);
+  };
 
-  useEffect(() => {
-    localStorage.setItem('personal_schedules', JSON.stringify(schedules));
-  }, [schedules]);
+  const fetchSchedules = async () => {
+    const { data } = await supabase.from('schedules').select('*');
+    if (data) setSchedules(data);
+  };
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -53,49 +60,67 @@ export default function App() {
     }
   };
 
-  const handleAddStudent = (e) => {
+  const handleAddStudent = async (e) => {
     e.preventDefault();
     const student = { ...newStudent, id: Date.now().toString(), classesDone: 0, vouchers: 0, paymentPending: false };
-    setStudents([...students, student]);
+    
+    await supabase.from('students').insert([student]);
+    fetchStudents();
     setShowStudentModal(false);
     setNewStudent({ name: '', whatsapp: '', email: '', birthDate: '', unit: UNIDADES[0], packTotal: 4 });
   };
 
-  const handleAddSchedule = (e) => {
+  const handleAddSchedule = async (e) => {
     e.preventDefault();
     const student = students.find(s => s.id === newSchedule.studentId);
-    const isBonus = student.packTotal === 4 && student.classesDone >= 4;
+    const isBonus = student ? (student.packTotal === 4 && student.classesDone >= 4) : false;
 
     const schedule = {
       id: Date.now().toString(),
       ...newSchedule,
-      studentName: student.name,
-      studentWhatsapp: student.whatsapp,
+      studentName: student ? student.name : '',
+      studentWhatsapp: student ? student.whatsapp : '',
       status: 'pending',
       isBonus
     };
 
-    setSchedules([...schedules, schedule]);
+    await supabase.from('schedules').insert([schedule]);
+    fetchSchedules();
     setShowScheduleModal(false);
   };
 
-  const handleCheckIn = (scheduleId, studentId) => {
-    setSchedules(schedules.map(s => s.id === scheduleId ? { ...s, status: 'completed' } : s));
-    setStudents(students.map(st => st.id === studentId ? { ...st, classesDone: st.classesDone + 1 } : st));
+  const handleCheckIn = async (scheduleId, studentId) => {
+    const student = students.find(s => s.id === studentId);
+    await supabase.from('schedules').update({ status: 'completed' }).eq('id', scheduleId);
+    if (student) {
+      await supabase.from('students').update({ classesDone: (student.classesDone || 0) + 1 }).eq('id', studentId);
+    }
+    fetchSchedules();
+    fetchStudents();
   };
 
-  const handleCancelWithReagenda = (scheduleId, studentId) => {
+  const handleCancelWithReagenda = async (scheduleId, studentId) => {
+    const student = students.find(s => s.id === studentId);
     const now = new Date();
     const expiry = new Date(now.getFullYear(), now.getMonth() + 2, 0).toISOString().split('T')[0];
 
-    setSchedules(schedules.map(s => s.id === scheduleId ? { ...s, status: 'cancelled' } : s));
-    setStudents(students.map(st => st.id === studentId ? { ...st, vouchers: st.vouchers + 1 } : st));
+    await supabase.from('schedules').update({ status: 'cancelled' }).eq('id', scheduleId);
+    if (student) {
+      await supabase.from('students').update({ vouchers: (student.vouchers || 0) + 1 }).eq('id', studentId);
+    }
+    fetchSchedules();
+    fetchStudents();
     alert(`Aula cancelada! Voucher de reposição gerado. Validade: ${expiry}`);
   };
 
-  const handleNoShow = (scheduleId, studentId) => {
-    setSchedules(schedules.map(s => s.id === scheduleId ? { ...s, status: 'no-show' } : s));
-    setStudents(students.map(st => st.id === studentId ? { ...st, classesDone: st.classesDone + 1 } : st));
+  const handleNoShow = async (scheduleId, studentId) => {
+    const student = students.find(s => s.id === studentId);
+    await supabase.from('schedules').update({ status: 'no-show' }).eq('id', scheduleId);
+    if (student) {
+      await supabase.from('students').update({ classesDone: (student.classesDone || 0) + 1 }).eq('id', studentId);
+    }
+    fetchSchedules();
+    fetchStudents();
   };
 
   const openWhatsApp = (phone, name) => {
@@ -251,11 +276,11 @@ export default function App() {
                   <div className="grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-100">
                     <div>
                       <span className="text-[10px] text-slate-400 font-bold uppercase block">Aulas no Mês</span>
-                      <span className="text-sm font-bold text-slate-800">{st.classesDone} / {st.packTotal} feitas</span>
+                      <span className="text-sm font-bold text-slate-800">{st.classesDone || 0} / {st.packTotal} feitas</span>
                     </div>
                     <div>
                       <span className="text-[10px] text-slate-400 font-bold uppercase block">Vouchers</span>
-                      <span className="text-sm font-bold text-indigo-600">{st.vouchers} Reposições</span>
+                      <span className="text-sm font-bold text-indigo-600">{st.vouchers || 0} Reposições</span>
                     </div>
                   </div>
 
