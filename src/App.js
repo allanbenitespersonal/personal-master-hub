@@ -16,6 +16,7 @@ const UNIDADES = [
 ];
 
 const PACK_OPTIONS = [
+  { label: '0 Aulas (Consultoria)', value: 0, price: 0 },
   { label: '4 Aulas (1x/semana)', value: 4, price: 400 },
   { label: '8 Aulas (2x/semana)', value: 8, price: 700 },
   { label: '12 Aulas (3x/semana)', value: 12, price: 950 },
@@ -23,6 +24,7 @@ const PACK_OPTIONS = [
 ];
 
 const DIAS_SEMANA = [
+  { id: '0', label: 'Dom' },
   { id: '1', label: 'Seg' },
   { id: '2', label: 'Ter' },
   { id: '3', label: 'Qua' },
@@ -96,7 +98,7 @@ export default function App() {
         gender: student.gender || 'Feminino',
         modality: student.modality || 'Presencial',
         unit: student.unit || UNIDADES[0],
-        packtotal: student.packtotal || 4,
+        packtotal: student.packtotal ?? 4,
         fixed_days: student.fixed_days ? student.fixed_days.split(',') : [],
         fixed_time: student.fixed_time || '08:00',
         cycle_type: student.cycle_type || 'mês_vigente',
@@ -110,6 +112,14 @@ export default function App() {
       });
     }
     setShowStudentModal(true);
+  };
+
+  const handleModalityChange = (modality) => {
+    if (modality === 'Consultoria') {
+      setNewStudent({ ...newStudent, modality, packtotal: 0, fixed_time: 'Sem horário fixo' });
+    } else {
+      setNewStudent({ ...newStudent, modality, packtotal: newStudent.packtotal === 0 ? 4 : newStudent.packtotal });
+    }
   };
 
   const handleSaveStudent = async (e) => {
@@ -252,7 +262,7 @@ export default function App() {
   };
 
   const isDelayed = (dateStr, timeStr, status) => {
-    if (status !== 'pending') return false;
+    if (status !== 'pending' || timeStr === 'Sem horário fixo') return false;
     const classTime = new Date(`${dateStr}T${timeStr}`);
     const now = new Date();
     const diffMinutes = (now - classTime) / (1000 * 60);
@@ -415,7 +425,7 @@ export default function App() {
                         <p className="text-xs text-slate-400">{st.email}</p>
                         {st.fixed_days && (
                           <p className="text-[11px] text-indigo-600 font-medium mt-1">
-                            Grade Fixa: {st.fixed_days} às {st.fixed_time}
+                            Grade Fixa: {st.fixed_days} {st.fixed_time ? `às ${st.fixed_time}` : ''}
                           </p>
                         )}
                       </div>
@@ -430,7 +440,9 @@ export default function App() {
                     <div className="grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-100">
                       <div>
                         <span className="text-[10px] text-slate-400 font-bold uppercase block">Aulas no Mês</span>
-                        <span className="text-sm font-bold text-slate-800">{st.classesdone || 0} / {st.packtotal} feitas</span>
+                        <span className="text-sm font-bold text-slate-800">
+                          {st.packtotal === 0 ? 'Consultoria' : `${st.classesdone || 0} / ${st.packtotal} feitas`}
+                        </span>
                       </div>
                       <div>
                         <span className="text-[10px] text-slate-400 font-bold uppercase block">Vouchers</span>
@@ -501,7 +513,7 @@ export default function App() {
         )}
       </main>
 
-      {/* --- MODAL CADASTRO / EDIÇÃO DE ALUNO (ATUALIZADO) --- */}
+      {/* --- MODAL CADASTRO / EDIÇÃO DE ALUNO --- */}
       {showStudentModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl p-5 w-full max-w-sm space-y-4 max-h-[90vh] overflow-y-auto">
@@ -544,7 +556,7 @@ export default function App() {
                       <button 
                         type="button" 
                         key={m} 
-                        onClick={() => setNewStudent({...newStudent, modality: m})}
+                        onClick={() => handleModalityChange(m)}
                         className={`flex-1 py-2 text-xs font-bold rounded-xl border transition ${selected ? 'bg-indigo-600 text-white border-indigo-600 shadow' : 'bg-slate-50 text-slate-600 border-slate-200'}`}
                       >
                         {m}
@@ -570,7 +582,7 @@ export default function App() {
 
               <div>
                 <label className="text-xs font-bold text-slate-700 block mb-1">Dias da Grade Fixa</label>
-                <div className="flex gap-1">
+                <div className="flex gap-1 overflow-x-auto pb-1">
                   {DIAS_SEMANA.map(d => {
                     const selected = newStudent.fixed_days.includes(d.label);
                     return (
@@ -581,7 +593,7 @@ export default function App() {
                           const days = selected ? newStudent.fixed_days.filter(x => x !== d.label) : [...newStudent.fixed_days, d.label];
                           setNewStudent({...newStudent, fixed_days: days});
                         }}
-                        className={`flex-1 py-1.5 text-xs font-bold rounded-lg border ${selected ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 text-slate-600'}`}
+                        className={`flex-1 min-w-[36px] py-1.5 text-xs font-bold rounded-lg border ${selected ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 text-slate-600'}`}
                       >
                         {d.label}
                       </button>
@@ -593,7 +605,11 @@ export default function App() {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-1">Horário Fixo</label>
-                  <input type="time" value={newStudent.fixed_time} onChange={e => setNewStudent({...newStudent, fixed_time: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" />
+                  {newStudent.modality === 'Consultoria' ? (
+                    <input type="text" readOnly value="Sem horário fixo" className="w-full p-2.5 border rounded-xl text-sm bg-slate-100 text-slate-500" />
+                  ) : (
+                    <input type="time" value={newStudent.fixed_time} onChange={e => setNewStudent({...newStudent, fixed_time: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" />
+                  )}
                 </div>
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-1">Dia Vencimento</label>
