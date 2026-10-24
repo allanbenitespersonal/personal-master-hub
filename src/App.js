@@ -32,22 +32,23 @@ export default function App() {
   
   const [showStudentModal, setShowStudentModal] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const [newStudent, setNewStudent] = useState({ name: '', whatsapp: '', email: '', birthDate: '', unit: UNIDADES[0], packTotal: 4 });
-  const [newSchedule, setNewSchedule] = useState({ studentId: '', date: new Date().toISOString().split('T')[0], time: '08:00', unit: UNIDADES[0] });
+  const [newStudent, setNewStudent] = useState({ name: '', whatsapp: '', email: '', birthdate: '', unit: UNIDADES[0], packtotal: 4 });
+  const [newSchedule, setNewSchedule] = useState({ studentid: '', date: new Date().toISOString().split('T')[0], time: '08:00', unit: UNIDADES[0] });
 
-  // Carregar dados em tempo real do Supabase
   useEffect(() => {
     fetchStudents();
     fetchSchedules();
   }, []);
 
   const fetchStudents = async () => {
-    const { data } = await supabase.from('students').select('*');
+    const { data, error } = await supabase.from('students').select('*');
+    if (error) console.error(error);
     if (data) setStudents(data);
   };
 
   const fetchSchedules = async () => {
-    const { data } = await supabase.from('schedules').select('*');
+    const { data, error } = await supabase.from('schedules').select('*');
+    if (error) console.error(error);
     if (data) setSchedules(data);
   };
 
@@ -62,38 +63,46 @@ export default function App() {
 
   const handleAddStudent = async (e) => {
     e.preventDefault();
-    const student = { ...newStudent, id: Date.now().toString(), classesDone: 0, vouchers: 0, paymentPending: false };
+    const student = { ...newStudent, id: Date.now().toString(), classesdone: 0, vouchers: 0, paymentpending: false };
     
-    await supabase.from('students').insert([student]);
-    fetchStudents();
-    setShowStudentModal(false);
-    setNewStudent({ name: '', whatsapp: '', email: '', birthDate: '', unit: UNIDADES[0], packTotal: 4 });
+    const { error } = await supabase.from('students').insert([student]);
+    if (error) {
+      alert('Erro ao salvar aluno: ' + error.message);
+    } else {
+      fetchStudents();
+      setShowStudentModal(false);
+      setNewStudent({ name: '', whatsapp: '', email: '', birthdate: '', unit: UNIDADES[0], packtotal: 4 });
+    }
   };
 
   const handleAddSchedule = async (e) => {
     e.preventDefault();
-    const student = students.find(s => s.id === newSchedule.studentId);
-    const isBonus = student ? (student.packTotal === 4 && student.classesDone >= 4) : false;
+    const student = students.find(s => s.id === newSchedule.studentid);
+    const isbonus = student ? (student.packtotal === 4 && student.classesdone >= 4) : false;
 
     const schedule = {
       id: Date.now().toString(),
       ...newSchedule,
-      studentName: student ? student.name : '',
-      studentWhatsapp: student ? student.whatsapp : '',
+      studentname: student ? student.name : '',
+      studentwhatsapp: student ? student.whatsapp : '',
       status: 'pending',
-      isBonus
+      isbonus
     };
 
-    await supabase.from('schedules').insert([schedule]);
-    fetchSchedules();
-    setShowScheduleModal(false);
+    const { error } = await supabase.from('schedules').insert([schedule]);
+    if (error) {
+      alert('Erro ao agendar aula: ' + error.message);
+    } else {
+      fetchSchedules();
+      setShowScheduleModal(false);
+    }
   };
 
   const handleCheckIn = async (scheduleId, studentId) => {
     const student = students.find(s => s.id === studentId);
     await supabase.from('schedules').update({ status: 'completed' }).eq('id', scheduleId);
     if (student) {
-      await supabase.from('students').update({ classesDone: (student.classesDone || 0) + 1 }).eq('id', studentId);
+      await supabase.from('students').update({ classesdone: (student.classesdone || 0) + 1 }).eq('id', studentId);
     }
     fetchSchedules();
     fetchStudents();
@@ -117,7 +126,7 @@ export default function App() {
     const student = students.find(s => s.id === studentId);
     await supabase.from('schedules').update({ status: 'no-show' }).eq('id', scheduleId);
     if (student) {
-      await supabase.from('students').update({ classesDone: (student.classesDone || 0) + 1 }).eq('id', studentId);
+      await supabase.from('students').update({ classesdone: (student.classesdone || 0) + 1 }).eq('id', studentId);
     }
     fetchSchedules();
     fetchStudents();
@@ -205,7 +214,7 @@ export default function App() {
                 .filter(s => selectedUnit === 'Todas' || s.unit === selectedUnit)
                 .map((s) => (
                   <div key={s.id} className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-3 relative">
-                    {s.isBonus && (
+                    {s.isbonus && (
                       <span className="absolute top-0 right-0 bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-bl-lg">
                         5ª Sem. Bônus (R$ 0,00)
                       </span>
@@ -213,7 +222,7 @@ export default function App() {
                     <div className="flex justify-between items-start">
                       <div>
                         <span className="text-xs font-bold text-indigo-600 uppercase">{s.time} • {s.unit}</span>
-                        <h3 className="text-base font-bold text-slate-900">{s.studentName}</h3>
+                        <h3 className="text-base font-bold text-slate-900">{s.studentname}</h3>
                         <span className="text-xs text-slate-500">{s.date}</span>
                       </div>
                       <div>
@@ -226,16 +235,16 @@ export default function App() {
 
                     {s.status === 'pending' && (
                       <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
-                        <button onClick={() => handleCheckIn(s.id, s.studentId)} className="bg-emerald-600 text-white py-2 px-3 rounded-xl text-xs font-bold">
+                        <button onClick={() => handleCheckIn(s.id, s.studentid)} className="bg-emerald-600 text-white py-2 px-3 rounded-xl text-xs font-bold">
                           ✓ Check-in
                         </button>
-                        <button onClick={() => handleCancelWithReagenda(s.id, s.studentId)} className="bg-amber-500 text-white py-2 px-3 rounded-xl text-xs font-bold">
+                        <button onClick={() => handleCancelWithReagenda(s.id, s.studentid)} className="bg-amber-500 text-white py-2 px-3 rounded-xl text-xs font-bold">
                           ↺ Cancelar (&gt;12h)
                         </button>
-                        <button onClick={() => handleNoShow(s.id, s.studentId)} className="bg-rose-600 text-white py-2 px-3 rounded-xl text-xs font-bold">
+                        <button onClick={() => handleNoShow(s.id, s.studentid)} className="bg-rose-600 text-white py-2 px-3 rounded-xl text-xs font-bold">
                           ✕ Falta (&lt;12h)
                         </button>
-                        <button onClick={() => openWhatsApp(s.studentWhatsapp, s.studentName)} className="bg-emerald-500 text-white py-2 px-3 rounded-xl text-xs font-bold">
+                        <button onClick={() => openWhatsApp(s.studentwhatsapp, s.studentname)} className="bg-emerald-500 text-white py-2 px-3 rounded-xl text-xs font-bold">
                           💬 WhatsApp
                         </button>
                       </div>
@@ -266,7 +275,7 @@ export default function App() {
                       <h3 className="font-bold text-slate-900">{st.name}</h3>
                       <p className="text-xs text-slate-500">{st.unit} • {st.whatsapp}</p>
                     </div>
-                    {st.paymentPending ? (
+                    {st.paymentpending ? (
                       <span className="bg-rose-100 text-rose-700 text-xs font-bold px-2 py-0.5 rounded">Inadimplente</span>
                     ) : (
                       <span className="bg-emerald-100 text-emerald-700 text-xs font-bold px-2 py-0.5 rounded">Em dia</span>
@@ -276,7 +285,7 @@ export default function App() {
                   <div className="grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-100">
                     <div>
                       <span className="text-[10px] text-slate-400 font-bold uppercase block">Aulas no Mês</span>
-                      <span className="text-sm font-bold text-slate-800">{st.classesDone || 0} / {st.packTotal} feitas</span>
+                      <span className="text-sm font-bold text-slate-800">{st.classesdone || 0} / {st.packtotal} feitas</span>
                     </div>
                     <div>
                       <span className="text-[10px] text-slate-400 font-bold uppercase block">Vouchers</span>
@@ -302,13 +311,13 @@ export default function App() {
               <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
                 <span className="text-xs text-slate-500 font-semibold block mb-1">Previsto no Mês</span>
                 <span className="text-xl font-bold text-slate-900">
-                  R$ {students.reduce((acc, st) => acc + (PACK_OPTIONS.find(p => p.value === st.packTotal)?.price || 0), 0)}
+                  R$ {students.reduce((acc, st) => acc + (PACK_OPTIONS.find(p => p.value === st.packtotal)?.price || 0), 0)}
                 </span>
               </div>
               <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
                 <span className="text-xs text-slate-500 font-semibold block mb-1">Recebido via Pix</span>
                 <span className="text-xl font-bold text-emerald-600">
-                  R$ {students.filter(st => !st.paymentPending).reduce((acc, st) => acc + (PACK_OPTIONS.find(p => p.value === st.packTotal)?.price || 0), 0)}
+                  R$ {students.filter(st => !st.paymentpending).reduce((acc, st) => acc + (PACK_OPTIONS.find(p => p.value === st.packtotal)?.price || 0), 0)}
                 </span>
               </div>
             </div>
@@ -323,11 +332,11 @@ export default function App() {
             <form onSubmit={handleAddStudent} className="space-y-3">
               <input required type="text" placeholder="Nome Completo" value={newStudent.name} onChange={e => setNewStudent({...newStudent, name: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" />
               <input required type="tel" placeholder="WhatsApp (DDD + Número)" value={newStudent.whatsapp} onChange={e => setNewStudent({...newStudent, whatsapp: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" />
-              <input required type="date" value={newStudent.birthDate} onChange={e => setNewStudent({...newStudent, birthDate: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" />
+              <input required type="date" value={newStudent.birthdate} onChange={e => setNewStudent({...newStudent, birthdate: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" />
               <select value={newStudent.unit} onChange={e => setNewStudent({...newStudent, unit: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm">
                 {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
               </select>
-              <select value={newStudent.packTotal} onChange={e => setNewStudent({...newStudent, packTotal: Number(e.target.value)})} className="w-full p-2.5 border rounded-xl text-sm">
+              <select value={newStudent.packtotal} onChange={e => setNewStudent({...newStudent, packtotal: Number(e.target.value)})} className="w-full p-2.5 border rounded-xl text-sm">
                 {PACK_OPTIONS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
               </select>
               <div className="flex gap-2 pt-2">
@@ -344,7 +353,7 @@ export default function App() {
           <div className="bg-white rounded-2xl p-5 w-full max-w-sm space-y-4">
             <h3 className="text-lg font-bold text-slate-900">Novo Agendamento</h3>
             <form onSubmit={handleAddSchedule} className="space-y-3">
-              <select required value={newSchedule.studentId} onChange={e => setNewSchedule({...newSchedule, studentId: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm">
+              <select required value={newSchedule.studentid} onChange={e => setNewSchedule({...newSchedule, studentid: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm">
                 <option value="">Selecione o Aluno</option>
                 {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
