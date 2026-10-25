@@ -32,21 +32,29 @@ const MODALIDADES = ['Consultoria', 'Híbrido', 'Presencial'];
 const SEXO_OPTIONS = ['Masculino', 'Feminino', 'Outro', 'Não informado'];
 const FORMAS_PAGAMENTO = ['Pix', 'Dinheiro', 'Cartão de Crédito', 'Cartão de Débito', 'Misto / Dividido'];
 
-// DATAS E AÇÕES DE MARKETING & PROSPECCÃO (2026/2027)
-const DATAS_MARKETING = [
-  { data: '08/03', nome: 'Dia Internacional da Mulher', tipo: 'Promocional', publico: 'Feminino', ideia: 'Desconto de 20% no 1º mês para alunas novas ou voucher presente.' },
-  { data: '15/03', nome: 'Dia do Consumidor', tipo: 'Promocional', publico: 'Geral', ideia: 'Oferta relâmpago de matrícula zero + avaliação grátis.' },
-  { data: '21/04', nome: 'Tiradentes (Feriado)', tipo: 'Feriado Nacional', publico: 'Geral', ideia: 'Treino especial ao ar livre / Aulão de feriado.' },
-  { data: '01/05', nome: 'Dia do Trabalho (Feriado)', tipo: 'Feriado Nacional', publico: 'Trabalhadores', ideia: 'Campanha "Invista na sua saúde pós-trabalho".' },
-  { data: '10/05', nome: 'Dia das Mães', tipo: 'Promocional', publico: 'Mães / Filhos', ideia: 'Plano em dupla Mãe & Filho(a) com condição especial.' },
-  { data: '12/06', nome: 'Dia dos Namorados', tipo: 'Promocional', publico: 'Casais', ideia: 'Treino em Dupla: Pague 1 e treinem 2 durante 1 mês.' },
-  { data: '09/08', nome: 'Dia dos Pais', tipo: 'Promocional', publico: 'Pais', ideia: 'Campanha "Pai em Forma" - Consultoria ou Personal presencial.' },
-  { data: '01/09', nome: 'Dia do Ed. Físico / Personal', tipo: 'Especial', publico: 'Geral', ideia: 'Semana do Personal Trainer: Avaliação física biomecânica gratuita.' },
-  { data: '20/09', dataGaucha: true, nome: 'Revolução Farroupilha (RS)', tipo: 'Feriado Regional', publico: 'RS / Poa', ideia: 'Campanha "Força e Tradição": Aulão temático.' },
-  { data: '12/10', nome: 'Nossa Sra. Aparecida (Feriado)', tipo: 'Feriado Nacional', publico: 'Geral', ideia: 'Ação para pais e mães.' },
-  { data: '28/10', nome: 'Dia do Servidor Público', tipo: 'Promocional', publico: 'Funcionalismo', ideia: 'Desconto exclusivo para funcionários públicos e conveniados.' },
-  { data: '27/11', nome: 'Black Friday', tipo: 'Promocional', publico: 'Geral', ideia: 'Maior oferta do ano: Desconto em planos semestrais ou anuais.' },
-  { data: '25/12', nome: 'Natal', tipo: 'Feriado Nacional', publico: 'Geral', ideia: 'Vouchers de presente de Natal para familiares de alunos.' }
+// DATAS E FERIADOS NACIONAIS & REGIONAIS (RS / POA)
+const DATAS_MARKETING_INICIAL = [
+  { id: '01-01', data: '01/01', nome: 'Ano Novo (Feriado Nacional)', tipo: 'Feriado Nacional', publico: 'Geral', ideia: 'Campanha "Novo Ano, Novas Metas": Plano Trimestral com desconto.' },
+  { id: '02-02', data: '02/02', nome: 'Nossa Sra. dos Navegantes (RS/POA)', tipo: 'Feriado Regional', publico: 'Porto Alegre', ideia: 'Aulão de Verão ao ar livre no Orla do Guaíba.' },
+  { id: '17-02', data: 'Fev/Mar', nome: 'Carnaval (Ponto Facultativo)', tipo: 'Nacional', publico: 'Geral', ideia: 'Desafio "Detox de Carnaval" para secar e recuperar o ritmo.' },
+  { id: '08-03', data: '08/03', nome: 'Dia Internacional da Mulher', tipo: 'Promocional', publico: 'Feminino', ideia: 'Desconto de 20% no 1º mês para alunas novas ou voucher presente.' },
+  { id: '15-03', data: '15/03', nome: 'Dia do Consumidor', tipo: 'Promocional', publico: 'Geral', ideia: 'Oferta relâmpago de taxa zero de avaliação física.' },
+  { data: 'Mar/Abr', id: 'sexta-santa', nome: 'Sexta-Feira Santa (Feriado Nacional)', tipo: 'Feriado Nacional', publico: 'Geral', ideia: 'Treino especial pré-feriado prolongado.' },
+  { id: '21-04', data: '21/04', nome: 'Tiradentes (Feriado Nacional)', tipo: 'Feriado Nacional', publico: 'Geral', ideia: 'Combo Treino + Consultoria com preço promocional.' },
+  { id: '01-05', data: '01/05', nome: 'Dia do Trabalho (Feriado Nacional)', tipo: 'Feriado Nacional', publico: 'Trabalhadores', ideia: 'Campanha "Invista na sua Saúde": Condições para profissionais corporativos.' },
+  { id: '10-05', data: '2º Dom/Mai', nome: 'Dia das Mães', tipo: 'Promocional', publico: 'Mães / Filhos', ideia: 'Plano em dupla Mãe & Filho(a) com isenção da primeira mensalidade.' },
+  { id: '12-06', data: '12/06', nome: 'Dia dos Namorados', tipo: 'Promocional', publico: 'Casais', ideia: 'Treino em Dupla: Pague 1 e treinem 2 durante o mês de Junho.' },
+  { id: '09-08', data: '2º Dom/Ago', nome: 'Dia dos Pais', tipo: 'Promocional', publico: 'Pais', ideia: 'Campanha "Pai Ativo" - Kit Personal + Consultoria.' },
+  { id: '01-09', data: '01/09', nome: 'Dia do Ed. Físico / Personal', tipo: 'Especial', publico: 'Geral', ideia: 'Semana do Personal: Avaliação biomecânica gratuita para indicações.' },
+  { id: '07-09', data: '07/09', nome: 'Independência do Brasil (Feriado)', tipo: 'Feriado Nacional', publico: 'Geral', ideia: 'Desafio 30 Dias de Independência da Sedentarismo.' },
+  { id: '20-09', data: '20/09', nome: 'Revolução Farroupilha (Feriado RS)', tipo: 'Feriado Regional', publico: 'Rio Grande do Sul', ideia: 'Campanha "Força Gaúcha": Desconto em planos presenciais.' },
+  { id: '12-10', data: '12/10', nome: 'Nossa Sra. Aparecida (Feriado)', tipo: 'Feriado Nacional', publico: 'Geral', ideia: 'Ação para pais e mães com rotina corrida.' },
+  { id: '28-10', data: '28/10', nome: 'Dia do Servidor Público', tipo: 'Promocional', publico: 'Funcionalismo', ideia: 'Desconto exclusivo permanente para funcionários públicos.' },
+  { id: '02-11', data: '02/11', nome: 'Finados (Feriado Nacional)', tipo: 'Feriado Nacional', publico: 'Geral', ideia: 'Reagendamento antecipado de aulas da semana.' },
+  { id: '15-11', data: '15/11', nome: 'Proclamação da República (Feriado)', tipo: 'Feriado Nacional', publico: 'Geral', ideia: 'Ação "Projeto Verão Relâmpago" (Últimos 45 dias do ano).' },
+  { id: '20-11', data: '20/11', nome: 'Dia da Consciência Negra (Feriado)', tipo: 'Feriado Nacional', publico: 'Geral', ideia: 'Aulão solidário e integrativo.' },
+  { id: '27-11', data: 'Última Sex/Nov', nome: 'Black Friday', tipo: 'Promocional', publico: 'Geral', ideia: 'Maior oferta do ano: Desconto em planos semestrais ou anuais.' },
+  { id: '25-12', data: '25/12', nome: 'Natal (Feriado Nacional)', tipo: 'Feriado Nacional', publico: 'Geral', ideia: 'Cartão presente de treino/consultoria para familiares.' }
 ];
 
 export default function App() {
@@ -59,7 +67,7 @@ export default function App() {
   const [transactions, setTransactions] = useState([]);
   const [pixKey, setPixKey] = useState(localStorage.getItem('pix_key') || '');
 
-  // --- EFEITO LANTERNA (CURSOR SPOTLIGHT) ---
+  // Efeito Lanterna
   const [mousePos, setMousePos] = useState({ x: -1000, y: -1000 });
 
   useEffect(() => {
@@ -69,26 +77,54 @@ export default function App() {
     window.addEventListener('mousemove', handleMouseMove);
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
+
+  // ESTADOS DE MARKETING & CAMPANHAS
+  const [campaignData, setCampaignData] = useState(() => {
+    const saved = localStorage.getItem('marketing_campaigns_data');
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  const [selectedCampaign, setSelectedCampaign] = useState(null);
+  const [campaignStartDate, setCampaignStartDate] = useState('');
+  const [campaignRevenue, setCampaignRevenue] = useState('');
+
+  const saveCampaignMetrics = (e) => {
+    e.preventDefault();
+    if (!selectedCampaign) return;
+
+    const updated = {
+      ...campaignData,
+      [selectedCampaign.id]: {
+        startDate: campaignStartDate,
+        revenue: Number(campaignRevenue || 0)
+      }
+    };
+
+    setCampaignData(updated);
+    localStorage.setItem('marketing_campaigns_data', JSON.stringify(updated));
+    alert(`Ação registrada para "${selectedCampaign.nome}"!`);
+    setSelectedCampaign(null);
+  };
   
-  // --- ESTADOS DA AGENDA ---
+  // ESTADOS DA AGENDA
   const [calendarView, setCalendarView] = useState('mes');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [searchStudent, setSearchStudent] = useState('');
   const [filterUnit, setFilterUnit] = useState('Todas');
   const [filterTurn, setFilterTurn] = useState('Todos');
 
-  // --- ESTADOS DE PESQUISA & FILTROS DE ALUNOS ---
+  // ESTADOS DE PESQUISA & FILTROS DE ALUNOS
   const [searchStudentTab, setSearchStudentTab] = useState('');
   const [filterStatusTab, setFilterStatusTab] = useState('Todos');
   const [filterModalityTab, setFilterModalityTab] = useState('Todas');
   const [filterBirthdayMonthTab, setFilterBirthdayMonthTab] = useState('Todos');
 
-  // --- FINANCEIRO AVANÇADO ---
+  // FINANCEIRO AVANÇADO
   const [filterRefMonth, setFilterRefMonth] = useState(`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`);
   const [filterSelectedStudents, setFilterSelectedStudents] = useState([]);
   const [filterPaymentMethod, setFilterPaymentMethod] = useState('Todos');
 
-  // Formulário de Lançamento Manual no Financeiro
+  // Formulário Manual Financeiro
   const [manualPayStudents, setManualPayStudents] = useState([]);
   const [manualPayRefMonth, setManualPayRefMonth] = useState(`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`);
   const [manualPayAmount, setManualPayAmount] = useState('');
@@ -421,6 +457,7 @@ export default function App() {
     return matchStudent && matchUnit && matchTurn;
   });
 
+  // --- LÓGICA DE FILTRAGEM E ORDENAÇÃO POR MÊS DE ANIVERSÁRIO ---
   const filteredStudentsTab = students.filter(st => {
     const isActive = st.active ?? true;
     const matchText = !searchStudentTab.trim() || 
@@ -439,6 +476,19 @@ export default function App() {
       (st.birthdate && parseInt(st.birthdate.split('-')[1], 10) === Number(filterBirthdayMonthTab));
 
     return matchText && matchStatus && matchModality && matchBirthday;
+  }).sort((a, b) => {
+    // Se o filtro de aniversário estiver ativo como "Ano Inteiro", ordena mês a mês
+    if (filterBirthdayMonthTab === 'Todos' && (a.birthdate || b.birthdate)) {
+      const monthA = a.birthdate ? parseInt(a.birthdate.split('-')[1], 10) : 99;
+      const monthB = b.birthdate ? parseInt(b.birthdate.split('-')[1], 10) : 99;
+      if (monthA !== monthB) return monthA - monthB;
+
+      const dayA = a.birthdate ? parseInt(a.birthdate.split('-')[2], 10) : 99;
+      const dayB = b.birthdate ? parseInt(b.birthdate.split('-')[2], 10) : 99;
+      return dayA - dayB;
+    }
+    // Ordenação padrão alfabética
+    return a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' });
   });
 
   const handleOpenStudentModal = (student = null) => {
@@ -683,7 +733,6 @@ export default function App() {
     return diffMinutes > 15;
   };
 
-  // --- OBTÉM OS DIAS DA SEMANA (SEGUNDA A DOMINGO) ---
   const getWeekDaysArray = (date) => {
     const tempDate = new Date(date);
     const dayOfWeek = tempDate.getDay();
@@ -709,17 +758,15 @@ export default function App() {
 
   const activeStudents = students.filter(st => st.active ?? true);
 
-  // --- CÁLCULOS DO DASHBOARD / RESUMO ---
+  // DASHBOARD RESUMO
   const todayStr = formatDateYYYYMMDD(new Date());
   const todaySchedules = schedules.filter(s => s.date === todayStr).sort((a, b) => a.time.localeCompare(b.time));
 
-  // Aulas da Semana Atual (Segunda a Domingo)
   const currentWeekDays = getWeekDaysArray(new Date());
   const weekStartStr = currentWeekDays[0].dateStr;
   const weekEndStr = currentWeekDays[6].dateStr;
   const weekSchedulesDone = schedules.filter(s => s.date >= weekStartStr && s.date <= weekEndStr && s.status === 'completed');
 
-  // Aniversariantes do Mês
   const currentMonthNum = new Date().getMonth() + 1;
   const birthdayStudents = students.filter(s => {
     if (!s.birthdate) return false;
@@ -727,10 +774,8 @@ export default function App() {
     return m === currentMonthNum;
   });
 
-  // Alunos com Vouchers
   const voucherStudents = students.filter(s => (s.vouchers || 0) > 0);
 
-  // Receita do Mês Corrente
   const currentMonthRefStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
   const currentMonthTransactions = transactions.filter(t => t.reference_month === currentMonthRefStr);
   const currentMonthRevenue = currentMonthTransactions.reduce((acc, t) => acc + Number(t.amount || 0), 0);
@@ -744,7 +789,7 @@ export default function App() {
 
   const goToBirthdayStudents = () => {
     setFilterStatusTab('Todos');
-    setFilterBirthdayMonthTab('Todos'); // Mostra ano inteiro
+    setFilterBirthdayMonthTab('Todos');
     setActiveTab('alunos');
   };
 
@@ -758,7 +803,6 @@ export default function App() {
     setActiveTab('alunos');
   };
 
-  // --- FILTRAGEM DE TRANSAÇÕES FINANCEIRAS ---
   const filteredTransactions = transactions.filter(t => {
     const matchMonth = filterRefMonth === 'Todos' || !filterRefMonth ? true : (t.reference_month === filterRefMonth);
     const matchStudents = filterSelectedStudents.length === 0 ? true : filterSelectedStudents.includes(t.student_id);
@@ -861,7 +905,7 @@ export default function App() {
               </span>
             </div>
 
-            {/* KPIS PRINCIPAIS COM LINKS Clicáveis */}
+            {/* KPIS PRINCIPAIS */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div 
                 onClick={goToActiveStudents}
@@ -915,7 +959,6 @@ export default function App() {
             {/* SEÇÃO CENTRAL DE WIDGETS */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               
-              {/* CARD: ATENDIMENTOS DE HOJE */}
               <div className="md:col-span-2 bg-[#0e1422]/80 backdrop-blur-md p-5 rounded-3xl border border-slate-800/80 shadow-xl space-y-4">
                 <div className="flex justify-between items-center border-b border-slate-800/80 pb-3">
                   <div className="flex items-center gap-2">
@@ -959,18 +1002,16 @@ export default function App() {
                 </div>
               </div>
 
-              {/* CARD: ANIVERSARIANTES & AVISOS */}
               <div className="space-y-4">
-                {/* ANIVERSARIANTES COM REDIRECIONAMENTO */}
                 <div 
                   onClick={goToBirthdayStudents}
                   className="bg-[#0e1422]/80 backdrop-blur-md p-5 rounded-3xl border border-slate-800/80 shadow-xl space-y-3 cursor-pointer hover:border-blue-500/50 transition"
                 >
                   <div className="flex justify-between items-center border-b border-slate-800/80 pb-2">
                     <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                      🎉 Aniversariantes do Mês ➔
+                      🎉 Aniversariantes ➔
                     </h3>
-                    <span className="text-[10px] font-bold text-blue-400 bg-blue-950/60 border border-blue-800/40 px-2 py-0.5 rounded-lg">Ver Ano Todo</span>
+                    <span className="text-[10px] font-bold text-blue-400 bg-blue-950/60 border border-blue-800/40 px-2 py-0.5 rounded-lg">Ver por Mês</span>
                   </div>
 
                   <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
@@ -994,12 +1035,11 @@ export default function App() {
                       </div>
                     ))}
                     {birthdayStudents.length === 0 && (
-                      <p className="text-center text-xs text-slate-500 py-4">Sem aniversariantes neste mês.Clique para ver os do ano.</p>
+                      <p className="text-center text-xs text-slate-500 py-4">Sem aniversariantes neste mês. Clique para ver todos os meses.</p>
                     )}
                   </div>
                 </div>
 
-                {/* ALUNOS COM VOUCHERS */}
                 <div 
                   onClick={goToVouchers}
                   className="bg-[#0e1422]/80 backdrop-blur-md p-5 rounded-3xl border border-slate-800/80 shadow-xl space-y-3 cursor-pointer hover:border-amber-500/50 transition"
@@ -1022,7 +1062,6 @@ export default function App() {
                     )}
                   </div>
                 </div>
-
               </div>
 
             </div>
@@ -1050,7 +1089,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* BARRA DE FILTROS & PESQUISA */}
             <div className="bg-[#0e1422]/80 backdrop-blur-md p-3.5 rounded-3xl border border-slate-800/80 shadow-xl space-y-2.5">
               <input 
                 type="text" 
@@ -1079,7 +1117,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* SELETOR DE VISÃO & NAVEGAÇÃO DE DATAS */}
             <div className="bg-[#0e1422]/80 backdrop-blur-md p-3.5 rounded-3xl border border-slate-800/80 shadow-xl space-y-3">
               <div className="flex justify-between items-center bg-[#080c16] p-1 rounded-2xl border border-slate-800/60">
                 <button 
@@ -1113,7 +1150,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* --- EXIBIÇÃO: VISÃO DIA --- */}
+            {/* VISÃO DIA */}
             {calendarView === 'dia' && (
               <div className="space-y-3 max-w-lg mx-auto">
                 {filteredSchedules
@@ -1181,7 +1218,7 @@ export default function App() {
               </div>
             )}
 
-            {/* --- EXIBIÇÃO: VISÃO SEMANA LARA E AMPLA --- */}
+            {/* VISÃO SEMANA */}
             {calendarView === 'semana' && (
               <div className="bg-[#0e1422]/80 backdrop-blur-md p-3.5 rounded-3xl border border-slate-800/80 shadow-xl overflow-x-auto">
                 <div className="grid grid-cols-7 gap-2 min-w-[1000px]">
@@ -1231,7 +1268,7 @@ export default function App() {
               </div>
             )}
 
-            {/* --- EXIBIÇÃO: VISÃO MÊS INTEIRO --- */}
+            {/* VISÃO MÊS */}
             {calendarView === 'mes' && (
               <div className="bg-[#0e1422]/80 backdrop-blur-md p-3.5 rounded-3xl border border-slate-800/80 shadow-xl space-y-2">
                 <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-slate-400">
@@ -1273,7 +1310,7 @@ export default function App() {
           </div>
         )}
 
-        {/* --- ABA 3: ALUNOS & VOUCHERS --- */}
+        {/* --- ABA 3: ALUNOS & ANIVERSARIANTES --- */}
         {activeTab === 'alunos' && (
           <div className="space-y-4 max-w-2xl mx-auto">
             <div className="flex justify-between items-center">
@@ -1335,19 +1372,19 @@ export default function App() {
                     onChange={e => setFilterBirthdayMonthTab(e.target.value)} 
                     className="w-full p-2 bg-[#080c16] border border-slate-800 rounded-xl text-xs text-white font-medium"
                   >
-                    <option value="Todos">Ano Inteiro</option>
-                    <option value="1">Jan</option>
-                    <option value="2">Fev</option>
-                    <option value="3">Mar</option>
-                    <option value="4">Abr</option>
-                    <option value="5">Mai</option>
-                    <option value="6">Jun</option>
-                    <option value="7">Jul</option>
-                    <option value="8">Ago</option>
-                    <option value="9">Set</option>
-                    <option value="10">Out</option>
-                    <option value="11">Nov</option>
-                    <option value="12">Dez</option>
+                    <option value="Todos">Ano Inteiro (Jan-Dez)</option>
+                    <option value="1">01 - Janeiro</option>
+                    <option value="2">02 - Fevereiro</option>
+                    <option value="3">03 - Março</option>
+                    <option value="4">04 - Abril</option>
+                    <option value="5">05 - Maio</option>
+                    <option value="6">06 - Junho</option>
+                    <option value="7">07 - Julho</option>
+                    <option value="8">08 - Agosto</option>
+                    <option value="9">09 - Setembro</option>
+                    <option value="10">10 - Outubro</option>
+                    <option value="11">11 - Novembro</option>
+                    <option value="12">12 - Dezembro</option>
                   </select>
                 </div>
               </div>
@@ -1434,7 +1471,6 @@ export default function App() {
               </span>
             </div>
 
-            {/* FORMULÁRIO DE LANÇAMENTO DE PAGAMENTO MENSAL / MULTI-ALUNO */}
             <div className="bg-[#0e1422]/90 backdrop-blur-md p-4 rounded-3xl border border-blue-800/50 shadow-xl space-y-3">
               <h3 className="text-xs font-bold text-blue-400 uppercase tracking-wider border-b border-slate-800/80 pb-2">➕ Lançar / Registrar Pagamento Manual</h3>
               <form onSubmit={handleAddBatchTransactions} className="space-y-3">
@@ -1510,7 +1546,6 @@ export default function App() {
               </form>
             </div>
 
-            {/* SEÇÃO DE FILTROS DO HISTÓRICO */}
             <div className="bg-[#0e1422]/80 backdrop-blur-md p-4 rounded-3xl border border-slate-800/80 shadow-xl space-y-3">
               <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">🔍 Filtro Mês a Mês & Multi-Aluno</h3>
               
@@ -1563,7 +1598,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* TABELA DE REGISTROS DE PAGAMENTO HISTÓRICO */}
             <div className="bg-[#0e1422]/80 backdrop-blur-md p-4 rounded-3xl border border-slate-800/80 shadow-xl space-y-3">
               <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Histórico de Pagamentos Recebidos</h3>
               
@@ -1605,58 +1639,122 @@ export default function App() {
           </div>
         )}
 
-        {/* --- ABA 5: PROSPECÇÃO & MARKETING --- */}
+        {/* --- ABA 5: PROSPECÇÃO & MARKETING COM MÉTRICAS DE AÇÕES --- */}
         {activeTab === 'marketing' && (
           <div className="space-y-4 max-w-2xl mx-auto">
             <div className="flex justify-between items-center">
               <div>
                 <h2 className="text-xl font-bold text-white">Prospecção & Marketing</h2>
-                <p className="text-xs text-slate-400">Calendário Comercial, Ofertas Relâmpago e Ações de Captação</p>
+                <p className="text-xs text-slate-400">Feriados Nacionais & Regionais com Registro de Ofertaços</p>
               </div>
               <span className="text-xs font-bold text-amber-400 bg-amber-950/60 border border-amber-800/50 px-3 py-1 rounded-full">
                 🚀 Ofertômetro
               </span>
             </div>
 
-            {/* LISTA DE DATAS E FERIADOS ESTRATÉGICOS */}
             <div className="space-y-3">
-              {DATAS_MARKETING.map((item, idx) => (
-                <div key={idx} className="bg-[#0e1422]/90 backdrop-blur-md p-4 rounded-3xl border border-slate-800/80 shadow-xl space-y-2 hover:border-blue-500/50 transition">
-                  <div className="flex justify-between items-start">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-black text-blue-400 bg-blue-950/80 border border-blue-800/60 px-2.5 py-1 rounded-xl">
-                        {item.data}
+              {DATAS_MARKETING_INICIAL.map((item) => {
+                const metrics = campaignData[item.id] || {};
+                const hasMetrics = !!metrics.startDate;
+
+                return (
+                  <div 
+                    key={item.id} 
+                    onClick={() => {
+                      setSelectedCampaign(item);
+                      setCampaignStartDate(metrics.startDate || new Date().toISOString().split('T')[0]);
+                      setCampaignRevenue(metrics.revenue || '');
+                    }}
+                    className={`bg-[#0e1422]/90 backdrop-blur-md p-4 rounded-3xl border shadow-xl space-y-2.5 cursor-pointer transition ${hasMetrics ? 'border-emerald-600/80 bg-emerald-950/10' : 'border-slate-800/80 hover:border-blue-500/50'}`}
+                  >
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-blue-400 bg-blue-950/80 border border-blue-800/60 px-2.5 py-1 rounded-xl">
+                          {item.data}
+                        </span>
+                        <h3 className="font-bold text-white text-sm">{item.nome}</h3>
+                      </div>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${item.tipo === 'Promocional' ? 'bg-amber-950/60 text-amber-400 border-amber-800/50' : item.tipo === 'Feriado Regional' ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800/50' : 'bg-slate-800 text-slate-300 border-slate-700'}`}>
+                        {item.tipo}
                       </span>
-                      <h3 className="font-bold text-white text-sm">{item.nome}</h3>
                     </div>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${item.tipo === 'Promocional' ? 'bg-amber-950/60 text-amber-400 border-amber-800/50' : item.tipo === 'Feriado Regional' ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800/50' : 'bg-slate-800 text-slate-300 border-slate-700'}`}>
-                      {item.tipo}
-                    </span>
-                  </div>
 
-                  <p className="text-xs text-slate-300 font-medium">
-                    🎯 <strong>Público-Alvo:</strong> {item.publico}
-                  </p>
+                    <p className="text-xs text-slate-300 font-medium">
+                      🎯 <strong>Público:</strong> {item.publico}
+                    </p>
 
-                  <div className="bg-[#080c16] p-3 rounded-2xl border border-slate-800/60 space-y-2">
-                    <p className="text-xs text-amber-300 font-semibold">💡 Ideia de Ação Relâmpago:</p>
-                    <p className="text-xs text-slate-300">{item.ideia}</p>
-                    <button 
-                      onClick={() => alert(`Cópia sugerida para disparar no WhatsApp:\n\n"Olá! Em comemoração ao ${item.nome}, preparei uma condição super especial para novos alunos nesta semana: ${item.ideia} Bora agendar sua avaliação experimental?"`)}
-                      className="text-[10px] font-bold text-blue-400 hover:text-blue-300 underline pt-1 block"
-                    >
-                      📋 Copiar Script de Divulgação
-                    </button>
+                    <div className="bg-[#080c16] p-3 rounded-2xl border border-slate-800/60 space-y-1.5">
+                      <p className="text-xs text-amber-300 font-semibold">💡 Estratégia de Ação:</p>
+                      <p className="text-xs text-slate-300">{item.ideia}</p>
+                    </div>
+
+                    {/* STATUS DE DESEMPENHO DA CAMPANHA */}
+                    <div className="pt-1 flex justify-between items-center text-xs">
+                      {hasMetrics ? (
+                        <div className="flex items-center gap-3">
+                          <span className="text-emerald-400 font-bold bg-emerald-950/80 border border-emerald-800/50 px-2.5 py-1 rounded-xl">
+                            Início: {metrics.startDate.split('-').reverse().join('/')}
+                          </span>
+                          <span className="text-white font-extrabold bg-blue-950/80 border border-blue-800/50 px-2.5 py-1 rounded-xl">
+                            Faturamento: R$ {Number(metrics.revenue).toLocaleString('pt-BR')}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-500 text-[11px] italic">Clique para registrar início da oferta e faturamento ➔</span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
 
       </main>
 
-      {/* --- MODAL DAR BAIXA EM PAGAMENTO --- */}
+      {/* --- MODAL REGISTRO DE OFERTA / MARKETING --- */}
+      {selectedCampaign && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0e1422] rounded-3xl p-5 w-full max-w-sm space-y-4 border border-slate-800 shadow-2xl">
+            <h3 className="text-lg font-bold text-white">🚀 Lançar / Registrar Ofertaço</h3>
+            <p className="text-xs text-slate-400">
+              Ação para <strong>{selectedCampaign.nome}</strong>
+            </p>
+
+            <form onSubmit={saveCampaignMetrics} className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-slate-300 block mb-1">Data Início da Oferta</label>
+                <input 
+                  required 
+                  type="date" 
+                  value={campaignStartDate} 
+                  onChange={e => setCampaignStartDate(e.target.value)} 
+                  className="w-full p-2.5 bg-[#080c16] border border-slate-800 rounded-2xl text-sm font-bold text-white" 
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-300 block mb-1">Faturamento Obtido (R$)</label>
+                <input 
+                  type="number" 
+                  step="0.01" 
+                  placeholder="Ex: 1500" 
+                  value={campaignRevenue} 
+                  onChange={e => setCampaignRevenue(e.target.value)} 
+                  className="w-full p-2.5 bg-[#080c16] border border-slate-800 rounded-2xl text-sm font-bold text-emerald-400" 
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button type="button" onClick={() => setSelectedCampaign(null)} className="w-1/2 py-2.5 border border-slate-800 rounded-2xl text-sm font-bold text-slate-400 hover:text-white">Cancelar</button>
+                <button type="submit" className="w-1/2 py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-2xl text-sm font-bold shadow-lg">Salvar Métrica</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAIS DE SISTEMA MANTIDOS */}
       {showPaymentModal && selectedStudentForPayment && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-[#0e1422] rounded-3xl p-5 w-full max-w-sm space-y-4 border border-slate-800 shadow-2xl">
@@ -1721,7 +1819,6 @@ export default function App() {
         </div>
       )}
 
-      {/* --- MODAL GERAÇÃO EM MASSA DA GRADE --- */}
       {showBatchModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-[#0e1422] rounded-3xl p-5 w-full max-w-sm space-y-4 border border-slate-800 shadow-2xl">
@@ -1771,7 +1868,6 @@ export default function App() {
         </div>
       )}
 
-      {/* --- MODAL GESTÃO DE UNIDADES --- */}
       {showUnitsModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-[#0e1422] rounded-3xl p-5 w-full max-w-sm space-y-4 max-h-[90vh] overflow-y-auto border border-slate-800 shadow-2xl">
@@ -1811,7 +1907,6 @@ export default function App() {
         </div>
       )}
 
-      {/* --- MODAL CADASTRO / EDIÇÃO DE ALUNO --- */}
       {showStudentModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-[#0e1422] rounded-3xl p-5 w-full max-w-sm space-y-4 max-h-[90vh] overflow-y-auto border border-slate-800 shadow-2xl">
@@ -1959,7 +2054,6 @@ export default function App() {
         </div>
       )}
 
-      {/* --- MODAL DE NOVO AGENDAMENTO --- */}
       {showScheduleModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-[#0e1422] rounded-3xl p-5 w-full max-w-sm space-y-4 border border-slate-800 shadow-2xl">
@@ -1983,7 +2077,6 @@ export default function App() {
         </div>
       )}
 
-      {/* --- MODAL DE REMANEJAR HORÁRIO OU GERAR VOUCHER --- */}
       {showRescheduleModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-[#0e1422] rounded-3xl p-5 w-full max-w-sm space-y-4 border border-slate-800 shadow-2xl">
@@ -2027,7 +2120,7 @@ export default function App() {
         </div>
       )}
 
-      {/* --- BARRA DE NAVEGAÇÃO FIXA INFERIOR COM NOVA ABA MARKETING --- */}
+      {/* BARRA DE NAVEGAÇÃO FIXA INFERIOR */}
       <nav className="fixed bottom-0 left-0 right-0 bg-[#0b0f1a]/90 backdrop-blur-md border-t border-slate-800/80 p-2.5 z-40 flex justify-around">
         <button 
           onClick={() => setActiveTab('resumo')} 
