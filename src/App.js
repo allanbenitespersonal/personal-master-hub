@@ -89,7 +89,44 @@ export default function App() {
     fetchSchedules();
     fetchUnits();
     fetchTransactions();
+    requestNotificationPermission();
   }, []);
+
+  // AUTOMACÃO PUSH LOCAL: Verifica aulas pendentes há mais de 2h
+  useEffect(() => {
+    if (schedules.length === 0) return;
+
+    const interval = setInterval(() => {
+      const now = new Date();
+      schedules.forEach(s => {
+        if (s.status === 'pending' && s.time !== 'Sem horário fixo') {
+          const classTime = new Date(`${s.date}T${s.time}`);
+          const diffHours = (now - classTime) / (1000 * 60 * 60);
+
+          if (diffHours >= 2 && diffHours < 3) {
+            triggerPushNotification('Validação de Check-in Pendente', {
+              body: `A aula de ${s.studentname} (${s.time}) ocorreu há 2 horas. Lembre-se de validar o check-in!`,
+              icon: '/favicon.ico'
+            });
+          }
+        }
+      });
+    }, 15 * 60 * 1000); // Verifica a cada 15 minutos
+
+    return () => clearInterval(interval);
+  }, [schedules]);
+
+  const requestNotificationPermission = () => {
+    if ('Notification' in window && Notification.permission !== 'granted') {
+      Notification.requestPermission();
+    }
+  };
+
+  const triggerPushNotification = (title, options) => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification(title, options);
+    }
+  };
 
   const fetchUnits = async () => {
     const { data, error } = await supabase.from('units').select('*');
@@ -564,7 +601,6 @@ export default function App() {
   const activeStudents = students.filter(st => st.active ?? true);
   const now = new Date();
 
-  // Helper para meses de contrato no período
   const getActiveMonthsInPeriod = (startDateStr, periodMonths) => {
     const startDate = startDateStr ? new Date(`${startDateStr}T00:00:00`) : new Date(2020, 0, 1);
     let monthsToCount = 0;
@@ -600,7 +636,6 @@ export default function App() {
   const defaultRate = totalPeriodGross > 0 ? ((totalPendingPeriod / totalPeriodGross) * 100).toFixed(1) : 0;
   const avgTicket = activeStudents.length > 0 ? (activeStudents.reduce((acc, st) => acc + Number(st.monthly_fee || 0), 0) / activeStudents.length).toFixed(0) : 0;
 
-  // Totais por Método de Pagamento (das Transações)
   const paymentMethodTotals = FORMAS_PAGAMENTO.reduce((acc, method) => {
     const sum = transactions
       .filter(t => t.payment_method === method)
@@ -609,7 +644,6 @@ export default function App() {
     return acc;
   }, {});
 
-  // Distribuição por Modalidade
   const modalityStats = MODALIDADES.map(m => {
     const mStudents = activeStudents.filter(st => (st.modality || 'Presencial') === m);
     const mRevenue = mStudents.reduce((acc, st) => {
