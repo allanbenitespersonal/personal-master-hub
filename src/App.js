@@ -47,8 +47,9 @@ export default function App() {
   const [filterUnit, setFilterUnit] = useState('Todas');
   const [filterTurn, setFilterTurn] = useState('Todos');
 
-  // --- ESTADO DA BUSCA DE ALUNOS ---
+  // --- ESTADOS DE PESQUISA & FINANCEIRO ---
   const [searchStudentTab, setSearchStudentTab] = useState('');
+  const [financePeriod, setFinancePeriod] = useState('mensal'); // 'mensal', 'trimestral', 'semestral', 'anual'
 
   // Modais
   const [showStudentModal, setShowStudentModal] = useState(false);
@@ -95,7 +96,6 @@ export default function App() {
     const { data, error } = await supabase.from('students').select('*');
     if (error) console.error(error);
     if (data) {
-      // Ordena por ordem alfabética de A a Z
       const sorted = [...data].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
       setStudents(sorted);
     }
@@ -271,7 +271,6 @@ export default function App() {
     return matchStudent && matchUnit && matchTurn;
   });
 
-  // Alunos Filtrados e Ordenados para a Aba Alunos
   const filteredStudentsTab = students.filter(st => {
     if (!searchStudentTab.trim()) return true;
     const term = searchStudentTab.toLowerCase();
@@ -493,6 +492,32 @@ export default function App() {
     const diffMinutes = (now - classTime) / (1000 * 60);
     return diffMinutes > 15;
   };
+
+  // --- CÁLCULOS DO FINANCEIRO INTELIGENTE ---
+  const activeStudents = students.filter(st => st.active ?? true);
+  
+  // Multiplicador de período
+  const periodMultiplier = financePeriod === 'mensal' ? 1 : financePeriod === 'trimestral' ? 3 : financePeriod === 'semestral' ? 6 : 12;
+
+  const totalMonthlyGross = activeStudents.reduce((acc, st) => acc + Number(st.monthly_fee || 0), 0);
+  const totalPeriodGross = totalMonthlyGross * periodMultiplier;
+
+  const totalPaidMonthly = activeStudents.filter(st => !st.paymentpending).reduce((acc, st) => acc + Number(st.monthly_fee || 0), 0);
+  const totalPaidPeriod = totalPaidMonthly * periodMultiplier;
+
+  const totalPendingMonthly = activeStudents.filter(st => st.paymentpending).reduce((acc, st) => acc + Number(st.monthly_fee || 0), 0);
+  const totalPendingPeriod = totalPendingMonthly * periodMultiplier;
+
+  const defaultRate = totalPeriodGross > 0 ? ((totalPendingPeriod / totalPeriodGross) * 100).toFixed(1) : 0;
+  const avgTicket = activeStudents.length > 0 ? (totalMonthlyGross / activeStudents.length).toFixed(0) : 0;
+
+  // Distribuição por Modalidade
+  const modalityStats = MODALIDADES.map(m => {
+    const mStudents = activeStudents.filter(st => (st.modality || 'Presencial') === m);
+    const mRevenue = mStudents.reduce((acc, st) => acc + Number(st.monthly_fee || 0), 0) * periodMultiplier;
+    const percent = totalPeriodGross > 0 ? Math.round((mRevenue / totalPeriodGross) * 100) : 0;
+    return { name: m, count: mStudents.length, revenue: mRevenue, percent };
+  });
 
   if (!isAuthenticated) {
     return (
@@ -757,7 +782,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* BARRA DE PESQUISA DE ALUNOS (A-Z) */}
             <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between gap-2">
               <input 
                 type="text" 
@@ -837,34 +861,145 @@ export default function App() {
           </div>
         )}
 
-        {/* --- ABA PAINEL FINANCEIRO --- */}
+        {/* --- ABA PAINEL FINANCEIRO INTELIGENTE --- */}
         {activeTab === 'financeiro' && (
           <div className="space-y-4">
-            <h2 className="text-xl font-bold text-slate-800">Painel Financeiro</h2>
-            
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-bold text-slate-800">Painel Financeiro</h2>
+              <span className="text-xs font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-full">
+                {activeStudents.length} Alunos Ativos
+              </span>
+            </div>
+
+            {/* SELETOR DE PERÍODO */}
+            <div className="bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm flex justify-between gap-1">
+              {[
+                { id: 'mensal', label: 'Mensal' },
+                { id: 'trimestral', label: 'Trimestral' },
+                { id: 'semestral', label: 'Semestral' },
+                { id: 'anual', label: 'Anual' }
+              ].map(p => (
+                <button 
+                  key={p.id}
+                  onClick={() => setFinancePeriod(p.id)}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition ${financePeriod === p.id ? 'bg-indigo-600 text-white shadow' : 'text-slate-600 hover:bg-slate-100'}`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+
+            {/* CARDS DE NÚMEROS ABSOLUTOS */}
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                <span className="text-xs text-slate-500 font-semibold block mb-1">Previsto no Mês</span>
-                <span className="text-xl font-bold text-slate-900">
-                  R$ {students.filter(st => st.active ?? true).reduce((acc, st) => acc + Number(st.monthly_fee || 0), 0)}
+                <span className="text-[11px] text-slate-400 font-bold uppercase block mb-1">Faturamento Previsto</span>
+                <span className="text-xl font-extrabold text-slate-900">R$ {totalPeriodGross.toLocaleString('pt-BR')}</span>
+                <span className="text-[10px] text-slate-400 block mt-1">
+                  {financePeriod === 'mensal' ? 'Projeção Mês Vigente' : `Total acumulado ${periodMultiplier} meses`}
                 </span>
               </div>
+
               <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                <span className="text-xs text-slate-500 font-semibold block mb-1">Recebido via Pix</span>
-                <span className="text-xl font-bold text-emerald-600">
-                  R$ {students.filter(st => (st.active ?? true) && !st.paymentpending).reduce((acc, st) => acc + Number(st.monthly_fee || 0), 0)}
+                <span className="text-[11px] text-emerald-600 font-bold uppercase block mb-1">Recebido via Pix</span>
+                <span className="text-xl font-extrabold text-emerald-600">R$ {totalPaidPeriod.toLocaleString('pt-BR')}</span>
+                <span className="text-[10px] text-emerald-700/70 block mt-1">
+                  {((totalPaidPeriod / (totalPeriodGross || 1)) * 100).toFixed(0)}% quitado
                 </span>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                <span className="text-[11px] text-rose-500 font-bold uppercase block mb-1">Pendente / Inadimplência</span>
+                <span className="text-xl font-extrabold text-rose-600">R$ {totalPendingPeriod.toLocaleString('pt-BR')}</span>
+                <span className="text-[10px] text-rose-500 font-semibold block mt-1">
+                  Taxa de Inadimplência: {defaultRate}%
+                </span>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                <span className="text-[11px] text-indigo-600 font-bold uppercase block mb-1">Ticket Médio / Aluno</span>
+                <span className="text-xl font-extrabold text-indigo-600">R$ {avgTicket}</span>
+                <span className="text-[10px] text-slate-400 block mt-1">Mensal por contrato</span>
               </div>
             </div>
 
+            {/* GRÁFICO EM BLOCO / BARRA DE RETENÇÃO FINANCEIRA */}
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-2">
+              <div className="flex justify-between items-center text-xs font-bold">
+                <span className="text-slate-800">Balanço do Período ({financePeriod.toUpperCase()})</span>
+                <span className="text-emerald-600">{((totalPaidPeriod / (totalPeriodGross || 1)) * 100).toFixed(0)}% Recebido</span>
+              </div>
+              
+              {/* Barra do gráfico em blocos */}
+              <div className="h-4 w-full bg-slate-100 rounded-full overflow-hidden flex">
+                <div 
+                  className="bg-emerald-500 transition-all duration-500 h-full"
+                  style={{ width: `${(totalPaidPeriod / (totalPeriodGross || 1)) * 100}%` }}
+                  title="Recebido"
+                ></div>
+                <div 
+                  className="bg-rose-500 transition-all duration-500 h-full"
+                  style={{ width: `${(totalPendingPeriod / (totalPeriodGross || 1)) * 100}%` }}
+                  title="Pendente"
+                ></div>
+              </div>
+
+              <div className="flex justify-between text-[11px] font-semibold text-slate-500 pt-1">
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Recebido (R$ {totalPaidPeriod})</span>
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Pendente (R$ {totalPendingPeriod})</span>
+              </div>
+            </div>
+
+            {/* GRÁFICO DE PIZZA / RECEITA POR MODALIDADE */}
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-              <h3 className="text-sm font-bold text-slate-800">Ajuste de Valores dos Alunos (Mês Vigente)</h3>
-              <div className="space-y-2">
-                {students.filter(st => st.active ?? true).map(st => (
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Divisão de Receita por Modalidade</h3>
+              
+              <div className="flex items-center justify-around py-2">
+                {/* Visual Pizza CSS */}
+                <div 
+                  className="w-24 h-24 rounded-full border-2 border-white shadow-inner flex items-center justify-center relative"
+                  style={{
+                    background: `conic-gradient(
+                      #4f46e5 0% ${modalityStats[0].percent}%, 
+                      #06b6d4 ${modalityStats[0].percent}% ${modalityStats[0].percent + modalityStats[1].percent}%, 
+                      #10b981 ${modalityStats[0].percent + modalityStats[1].percent}% 100%
+                    )`
+                  }}
+                >
+                  <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center font-bold text-[10px] text-slate-700">
+                    {periodMultiplier}M
+                  </div>
+                </div>
+
+                {/* Legenda com Números Absolutos */}
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-indigo-600"></span>
+                    <span className="font-semibold text-slate-700">Consultoria:</span>
+                    <span className="font-bold text-slate-900">R$ {modalityStats[0].revenue} ({modalityStats[0].percent}%)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-cyan-500"></span>
+                    <span className="font-semibold text-slate-700">Híbrido:</span>
+                    <span className="font-bold text-slate-900">R$ {modalityStats[1].revenue} ({modalityStats[1].percent}%)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
+                    <span className="font-semibold text-slate-700">Presencial:</span>
+                    <span className="font-bold text-slate-900">R$ {modalityStats[2].revenue} ({modalityStats[2].percent}%)</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* GESTÃO DE MENSALIDADES INDIVIDUAIS */}
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Ajuste de Valores dos Alunos</h3>
+              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                {activeStudents.map(st => (
                   <div key={st.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-200">
                     <div>
                       <p className="text-xs font-bold text-slate-800">{st.name}</p>
-                      <p className="text-[10px] text-slate-400">Vencimento: Dia {st.due_day || 5}</p>
+                      <p className="text-[10px] text-slate-400">Vencimento: Dia {st.due_day || 5} • {st.modality || 'Presencial'}</p>
                     </div>
                     <div className="flex items-center gap-1">
                       <span className="text-xs font-bold text-slate-600">R$</span>
@@ -880,20 +1015,21 @@ export default function App() {
               </div>
             </div>
 
+            {/* CHAVE PIX */}
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-              <h3 className="text-sm font-bold text-slate-800">Sua Chave Pix para Cobrança</h3>
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Chave Pix para Cobrança</h3>
               <form onSubmit={handleSavePix} className="flex gap-2">
                 <input 
                   type="text" 
                   placeholder="Cole sua chave Pix (E-mail, CPF, Telefone...)" 
                   value={pixKey} 
                   onChange={e => setPixKey(e.target.value)} 
-                  className="flex-1 p-2.5 border rounded-xl text-sm" 
+                  className="flex-1 p-2.5 border rounded-xl text-xs" 
                 />
                 <button type="submit" className="bg-indigo-600 text-white px-4 rounded-xl text-xs font-bold">Salvar</button>
               </form>
               <button onClick={copyPix} className="w-full py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold">
-                📋 Copiar Minha Chave Pix
+                📋 Copiar Chave Pix
               </button>
             </div>
           </div>
