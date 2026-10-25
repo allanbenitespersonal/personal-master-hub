@@ -24,6 +24,10 @@ const DIAS_SEMANA = [
   { id: '6', label: 'Sáb' },
 ];
 
+const MAPA_DIAS_SEMANA = {
+  'Dom': 0, 'Seg': 1, 'Ter': 2, 'Qua': 3, 'Qui': 4, 'Sex': 5, 'Sáb': 6
+};
+
 const MODALIDADES = ['Consultoria', 'Híbrido', 'Presencial'];
 const SEXO_OPTIONS = ['Masculino', 'Feminino', 'Outro', 'Não informado'];
 
@@ -37,7 +41,7 @@ export default function App() {
   const [pixKey, setPixKey] = useState(localStorage.getItem('pix_key') || '');
   
   // --- ESTADOS DA AGENDA (VISÕES E FILTROS) ---
-  const [calendarView, setCalendarView] = useState('dia'); // 'dia', 'semana', 'mes'
+  const [calendarView, setCalendarView] = useState('mes'); // 'dia', 'semana', 'mes'
   const [currentDate, setCurrentDate] = useState(new Date());
   const [searchStudent, setSearchStudent] = useState('');
   const [filterUnit, setFilterUnit] = useState('Todas');
@@ -49,10 +53,13 @@ export default function App() {
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [showUnitsModal, setShowUnitsModal] = useState(false);
+  const [showBatchModal, setShowBatchModal] = useState(false);
   const [selectedSchedule, setSelectedSchedule] = useState(null);
 
   // Formulários
   const [newUnitName, setNewUnitName] = useState('');
+  const [batchYear, setBatchYear] = useState(new Date().getFullYear());
+  const [batchMonth, setBatchMonth] = useState(new Date().getMonth() + 1); // 1 a 12
   const [newStudent, setNewStudent] = useState({ 
     name: '', whatsapp: '', email: '', birthdate: '', gender: 'Feminino', modality: 'Presencial',
     unit: '', packtotal: 4, monthly_fee: 0, fixed_days: [], fixed_time: '08:00', cycle_type: 'mês_vigente', due_day: 5 
@@ -129,6 +136,68 @@ export default function App() {
 
   const activeUnitsList = units.filter(u => u.active).map(u => u.name);
 
+  // --- GERAÇÃO EM MASSA DA GRADE ---
+  const handleGenerateBatchSchedules = async (e) => {
+    e.preventDefault();
+    const activeStudents = students.filter(s => (s.active ?? true) && s.modality !== 'Consultoria');
+    if (activeStudents.length === 0) {
+      alert('Nenhum aluno presencial ou híbrido ativo encontrado.');
+      return;
+    }
+
+    const year = Number(batchYear);
+    const month = Number(batchMonth) - 1; // 0-indexed no JS
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    const newSchedulesToInsert = [];
+
+    activeStudents.forEach(st => {
+      if (!st.fixed_days) return;
+      const daysArr = st.fixed_days.split(',').map(d => MAPA_DIAS_SEMANA[d.trim()]).filter(d => d !== undefined);
+      if (daysArr.length === 0) return;
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateObj = new Date(year, month, day);
+        const dayOfWeek = dateObj.getDay();
+
+        if (daysArr.includes(dayOfWeek)) {
+          const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          
+          // Verifica se já não existe agendamento neste dia e horário para o aluno
+          const exists = schedules.some(sc => sc.studentid === st.id && sc.date === dateStr);
+          if (!exists) {
+            newSchedulesToInsert.push({
+              id: `${st.id}_${dateStr}_${Date.now()}_${Math.random()}`,
+              studentid: st.id,
+              studentname: st.name,
+              studentwhatsapp: st.whatsapp,
+              date: dateStr,
+              time: st.fixed_time || '08:00',
+              unit: st.unit || activeUnitsList[0] || 'Atendimento Domiciliar',
+              status: 'pending',
+              isbonus: false
+            });
+          }
+        }
+      }
+    });
+
+    if (newSchedulesToInsert.length === 0) {
+      alert('Nenhum novo agendamento precisou ser gerado (já existiam ou não há grades fixas configuradas).');
+      setShowBatchModal(false);
+      return;
+    }
+
+    const { error } = await supabase.from('schedules').insert(newSchedulesToInsert);
+    if (error) {
+      alert('Erro ao gerar agendamentos em massa: ' + error.message);
+    } else {
+      alert(`Sucesso! ${newSchedulesToInsert.length} agendamentos foram criados para ${batchMonth}/${batchYear}!`);
+      fetchSchedules();
+      setShowBatchModal(false);
+    }
+  };
+
   // --- NAVEGAÇÃO DE DATAS NA AGENDA ---
   const navigateDate = (amount) => {
     const newDate = new Date(currentDate);
@@ -144,7 +213,6 @@ export default function App() {
 
   const formatDateYYYYMMDD = (d) => d.toISOString().split('T')[0];
 
-  // Helper para verificar turno
   const matchesTurn = (timeStr, turn) => {
     if (turn === 'Todos' || !timeStr) return true;
     const hour = parseInt(timeStr.split(':')[0], 10);
@@ -155,7 +223,6 @@ export default function App() {
     return true;
   };
 
-  // Filtragem Geral de Agendamentos
   const filteredSchedules = schedules.filter(s => {
     const matchStudent = searchStudent ? s.studentname.toLowerCase().includes(searchStudent.toLowerCase()) : true;
     const matchUnit = filterUnit === 'Todas' ? true : s.unit === filterUnit;
@@ -393,7 +460,6 @@ export default function App() {
     );
   }
 
-  // Helper para gerar os dias do mês
   const getDaysInMonthGrid = (date) => {
     const year = date.getFullYear();
     const month = date.getMonth();
@@ -430,14 +496,22 @@ export default function App() {
         {/* --- ABA AGENDA MASTER --- */}
         {activeTab === 'agenda' && (
           <div className="space-y-4">
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center gap-2">
               <h2 className="text-xl font-bold text-slate-800">Agenda Master</h2>
-              <button 
-                onClick={() => setShowScheduleModal(true)}
-                className="bg-indigo-600 text-white p-2 py-2.5 rounded-xl flex items-center gap-1 text-xs font-bold shadow"
-              >
-                + Novo Agendamento
-              </button>
+              <div className="flex gap-1.5">
+                <button 
+                  onClick={() => setShowBatchModal(true)}
+                  className="bg-amber-500 text-white px-2.5 py-2 rounded-xl text-xs font-bold shadow flex items-center gap-1"
+                >
+                  ⚡ Gerar Mês
+                </button>
+                <button 
+                  onClick={() => setShowScheduleModal(true)}
+                  className="bg-indigo-600 text-white px-2.5 py-2 rounded-xl text-xs font-bold shadow"
+                >
+                  + Agendar
+                </button>
+              </div>
             </div>
 
             {/* BARRA DE FILTROS & PESQUISA */}
@@ -753,6 +827,49 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* --- MODAL GERAÇÃO EM MASSA DA GRADE --- */}
+      {showBatchModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-5 w-full max-w-sm space-y-4">
+            <h3 className="text-lg font-bold text-slate-900">⚡ Gerar Grade em Massa</h3>
+            <p className="text-xs text-slate-500">
+              O sistema irá criar automaticamente todas as aulas do mês para os alunos ativos com base nos dias e horários da grade fixa de cada um.
+            </p>
+
+            <form onSubmit={handleGenerateBatchSchedules} className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Mês</label>
+                  <select value={batchMonth} onChange={e => setBatchMonth(Number(e.target.value))} className="w-full p-2.5 border rounded-xl text-sm font-bold">
+                    <option value={1}>01 - Janeiro</option>
+                    <option value={2}>02 - Fevereiro</option>
+                    <option value={3}>03 - Março</option>
+                    <option value={4}>04 - Abril</option>
+                    <option value={5}>05 - Maio</option>
+                    <option value={6}>06 - Junho</option>
+                    <option value={7}>07 - Julho</option>
+                    <option value={8}>08 - Agosto</option>
+                    <option value={9}>09 - Setembro</option>
+                    <option value={10}>10 - Outubro</option>
+                    <option value={11}>11 - Novembro</option>
+                    <option value={12}>12 - Dezembro</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Ano</label>
+                  <input type="number" value={batchYear} onChange={e => setBatchYear(Number(e.target.value))} className="w-full p-2.5 border rounded-xl text-sm font-bold text-center" />
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button type="button" onClick={() => setShowBatchModal(false)} className="w-1/2 py-2.5 border rounded-xl text-sm font-bold text-slate-600">Cancelar</button>
+                <button type="submit" className="w-1/2 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-bold">⚡ Gerar Aulas</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* --- MODAL GESTÃO DE UNIDADES --- */}
       {showUnitsModal && (
