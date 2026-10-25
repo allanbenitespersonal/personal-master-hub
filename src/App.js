@@ -49,8 +49,12 @@ export default function App() {
   const [filterUnit, setFilterUnit] = useState('Todas');
   const [filterTurn, setFilterTurn] = useState('Todos');
 
-  // --- ESTADOS DE PESQUISA & FINANCEIRO ---
+  // --- ESTADOS DE PESQUISA & FILTROS DE ALUNOS ---
   const [searchStudentTab, setSearchStudentTab] = useState('');
+  const [filterStatusTab, setFilterStatusTab] = useState('Todos'); // 'Todos', 'Ativos', 'Inativos'
+  const [filterModalityTab, setFilterModalityTab] = useState('Todas'); // 'Todas', 'Presencial', 'Híbrido', 'Consultoria'
+
+  // --- FINANCEIRO ---
   const [financePeriod, setFinancePeriod] = useState('mensal');
 
   // Modais
@@ -92,7 +96,7 @@ export default function App() {
     requestNotificationPermission();
   }, []);
 
-  // AUTOMACÃO PUSH LOCAL: Verifica aulas pendentes há mais de 2h
+  // AUTO PUSH LOCAL
   useEffect(() => {
     if (schedules.length === 0) return;
 
@@ -111,7 +115,7 @@ export default function App() {
           }
         }
       });
-    }, 15 * 60 * 1000); // Verifica a cada 15 minutos
+    }, 15 * 60 * 1000);
 
     return () => clearInterval(interval);
   }, [schedules]);
@@ -370,10 +374,25 @@ export default function App() {
     return matchStudent && matchUnit && matchTurn;
   });
 
+  // FILTRAGEM COMPLETA DA ABA ALUNOS
   const filteredStudentsTab = students.filter(st => {
-    if (!searchStudentTab.trim()) return true;
-    const term = searchStudentTab.toLowerCase();
-    return st.name.toLowerCase().includes(term) || (st.whatsapp && st.whatsapp.includes(term));
+    const isActive = st.active ?? true;
+    
+    // Filtro por Texto (Nome ou Telefone)
+    const matchText = !searchStudentTab.trim() || 
+      st.name.toLowerCase().includes(searchStudentTab.toLowerCase()) || 
+      (st.whatsapp && st.whatsapp.includes(searchStudentTab));
+
+    // Filtro por Status (Ativos / Inativos)
+    const matchStatus = filterStatusTab === 'Todos' || 
+      (filterStatusTab === 'Ativos' && isActive) || 
+      (filterStatusTab === 'Inativos' && !isActive);
+
+    // Filtro por Modalidade
+    const matchModality = filterModalityTab === 'Todas' || 
+      (st.modality || 'Presencial') === filterModalityTab;
+
+    return matchText && matchStatus && matchModality;
   });
 
   // --- GESTÃO DE ALUNOS ---
@@ -597,7 +616,27 @@ export default function App() {
     return diffMinutes > 15;
   };
 
-  // --- CÁLCULOS FINANCEIROS CONSIDERANDO DATA DE INGRESSO ---
+  // --- CÁLCULOS DA SEMANA EM COLUNAS ---
+  const getWeekDaysArray = (date) => {
+    const startWeek = new Date(date);
+    startWeek.setDate(date.getDate() - date.getDay());
+    
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(startWeek);
+      d.setDate(startWeek.getDate() + i);
+      const dateStr = formatDateYYYYMMDD(d);
+      days.push({
+        dateObj: d,
+        dateStr,
+        dayLabel: DIAS_SEMANA[i].label,
+        dayNumber: d.getDate()
+      });
+    }
+    return days;
+  };
+
+  // --- CÁLCULOS FINANCEIROS ---
   const activeStudents = students.filter(st => st.active ?? true);
   const now = new Date();
 
@@ -738,7 +777,7 @@ export default function App() {
             <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm space-y-2.5">
               <input 
                 type="text" 
-                placeholder="🔍 Buscar aluno..." 
+                placeholder="🔍 Buscar aluno na agenda..." 
                 value={searchStudent}
                 onChange={e => setSearchStudent(e.target.value)}
                 className="w-full p-2 border rounded-xl text-xs"
@@ -798,22 +837,12 @@ export default function App() {
               </div>
             </div>
 
-            {/* --- EXIBIÇÃO: VISÃO DIA OU SEMANA --- */}
-            {(calendarView === 'dia' || calendarView === 'semana') && (
+            {/* --- EXIBIÇÃO: VISÃO DIA --- */}
+            {calendarView === 'dia' && (
               <div className="space-y-3">
                 {filteredSchedules
-                  .filter(s => {
-                    if (calendarView === 'dia') {
-                      return s.date === formatDateYYYYMMDD(currentDate);
-                    } else {
-                      const sDate = new Date(`${s.date}T00:00:00`);
-                      const startWeek = new Date(currentDate);
-                      startWeek.setDate(currentDate.getDate() - currentDate.getDay());
-                      const endWeek = new Date(startWeek);
-                      endWeek.setDate(startWeek.getDate() + 6);
-                      return sDate >= startWeek && sDate <= endWeek;
-                    }
-                  })
+                  .filter(s => s.date === formatDateYYYYMMDD(currentDate))
+                  .sort((a, b) => a.time.localeCompare(b.time))
                   .map((s) => {
                     const delayed = isDelayed(s.date, s.time, s.status);
                     return (
@@ -857,6 +886,58 @@ export default function App() {
                       </div>
                     );
                   })}
+              </div>
+            )}
+
+            {/* --- EXIBIÇÃO: VISÃO SEMANA POR COLUNAS (A-Z / HORÁRIO) --- */}
+            {calendarView === 'semana' && (
+              <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
+                <div className="grid grid-cols-7 gap-1.5 min-w-[650px]">
+                  {getWeekDaysArray(currentDate).map((wDay) => {
+                    const daySchedules = filteredSchedules
+                      .filter(s => s.date === wDay.dateStr)
+                      .sort((a, b) => a.time.localeCompare(b.time)); // Ordenado por horário
+
+                    const isToday = wDay.dateStr === formatDateYYYYMMDD(new Date());
+
+                    return (
+                      <div 
+                        key={wDay.dateStr} 
+                        className={`border rounded-xl p-1.5 min-h-[300px] flex flex-col justify-start space-y-1.5 ${isToday ? 'border-indigo-600 bg-indigo-50/20' : 'border-slate-200 bg-slate-50/50'}`}
+                      >
+                        {/* CABEÇALHO DO DIA NA COLUNA */}
+                        <div className={`text-center py-1 rounded-lg ${isToday ? 'bg-indigo-600 text-white font-bold' : 'bg-slate-200 text-slate-700 font-semibold'}`}>
+                          <span className="text-[10px] uppercase block">{wDay.dayLabel}</span>
+                          <span className="text-xs font-extrabold">{wDay.dayNumber}</span>
+                        </div>
+
+                        {/* LISTA DE ALUNOS DO DIA EM ORDEM DE HORÁRIO */}
+                        <div className="space-y-1.5 overflow-y-auto">
+                          {daySchedules.map(sc => (
+                            <div 
+                              key={sc.id} 
+                              onClick={() => {
+                                setCurrentDate(new Date(`${sc.date}T00:00:00`));
+                                setCalendarView('dia');
+                              }}
+                              className={`p-1.5 rounded-lg border text-[9px] shadow-sm cursor-pointer transition ${sc.status === 'completed' ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-white border-slate-200 text-slate-800 hover:border-indigo-400'}`}
+                            >
+                              <div className="flex justify-between items-center font-bold text-indigo-600">
+                                <span>{sc.time}</span>
+                                {sc.status === 'completed' && <span>✓</span>}
+                              </div>
+                              <div className="font-bold truncate text-slate-900 mt-0.5">{sc.studentname}</div>
+                              <div className="text-[8px] text-slate-400 truncate">{sc.unit}</div>
+                            </div>
+                          ))}
+                          {daySchedules.length === 0 && (
+                            <div className="text-center text-[9px] text-slate-300 py-4">Sem aulas</div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -906,30 +987,62 @@ export default function App() {
         {activeTab === 'alunos' && (
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <h2 className="text-xl font-bold text-slate-800">Alunos & Vouchers</h2>
-              <div className="flex gap-2">
-                <button onClick={() => setShowUnitsModal(true)} className="bg-slate-200 text-slate-700 p-2.5 rounded-xl text-sm font-semibold">
+              <div>
+                <h2 className="text-xl font-bold text-slate-800">Alunos & Vouchers</h2>
+                {/* CONTADOR DE ALUNOS CADASTRADOS X ATIVOS */}
+                <p className="text-xs font-semibold text-slate-500 mt-0.5">
+                  <span className="text-indigo-600 font-bold">{students.length}</span> Cadastrados • <span className="text-emerald-600 font-bold">{students.filter(s => s.active ?? true).length}</span> Ativos
+                </p>
+              </div>
+              <div className="flex gap-1.5">
+                <button onClick={() => setShowUnitsModal(true)} className="bg-slate-200 text-slate-700 p-2 rounded-xl text-xs font-semibold">
                   ⚙️ Unidades
                 </button>
-                <button onClick={() => handleOpenStudentModal()} className="bg-indigo-600 text-white p-2.5 rounded-xl text-sm font-semibold shadow">
-                  + Cadastrar Aluno
+                <button onClick={() => handleOpenStudentModal()} className="bg-indigo-600 text-white p-2 rounded-xl text-xs font-semibold shadow">
+                  + Cadastrar
                 </button>
               </div>
             </div>
 
-            <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between gap-2">
+            {/* PAINEL COMPLETO DE BUSCA E FILTROS DE ALUNOS */}
+            <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm space-y-2.5">
               <input 
                 type="text" 
-                placeholder="🔍 Pesquisar aluno por nome ou telefone..." 
+                placeholder="🔍 Pesquisar por nome ou WhatsApp..." 
                 value={searchStudentTab} 
                 onChange={e => setSearchStudentTab(e.target.value)} 
                 className="w-full p-2 border rounded-xl text-xs" 
               />
-              <span className="text-[10px] font-bold bg-indigo-50 text-indigo-700 px-2 py-1 rounded-lg border border-indigo-200 whitespace-nowrap">
-                A-Z ({filteredStudentsTab.length})
-              </span>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 block mb-0.5">Status</label>
+                  <select 
+                    value={filterStatusTab} 
+                    onChange={e => setFilterStatusTab(e.target.value)} 
+                    className="w-full p-1.5 border rounded-lg text-xs font-medium"
+                  >
+                    <option value="Todos">Todos (Ativos/Inativos)</option>
+                    <option value="Ativos">Apenas Ativos</option>
+                    <option value="Inativos">Apenas Inativos</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 block mb-0.5">Modalidade</label>
+                  <select 
+                    value={filterModalityTab} 
+                    onChange={e => setFilterModalityTab(e.target.value)} 
+                    className="w-full p-1.5 border rounded-lg text-xs font-medium"
+                  >
+                    <option value="Todas">Todas Modalidades</option>
+                    <option value="Presencial">Presencial</option>
+                    <option value="Híbrido">Híbrido</option>
+                    <option value="Consultoria">Consultoria</option>
+                  </select>
+                </div>
+              </div>
             </div>
 
+            {/* LISTAGEM DE ALUNOS FILTRADA E ORDENADA A-Z */}
             <div className="space-y-3">
               {filteredStudentsTab.map(st => {
                 const isActive = st.active ?? true;
@@ -990,6 +1103,9 @@ export default function App() {
                   </div>
                 );
               })}
+              {filteredStudentsTab.length === 0 && (
+                <p className="text-center text-slate-400 py-8 text-sm">Nenhum aluno encontrado com os filtros selecionados.</p>
+              )}
             </div>
           </div>
         )}
