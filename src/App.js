@@ -536,6 +536,19 @@ export default function App() {
     fetchStudents();
   };
 
+  // REVERTER CHECK-IN (VOLTAR PARA PENDENTE E DESFAZER CONTAGEM)
+  const handleResetToPending = async (schedule, studentId) => {
+    const student = students.find(s => s.id === studentId);
+    await supabase.from('schedules').update({ status: 'pending' }).eq('id', schedule.id);
+    
+    // Se estava concluída, desconta 1 aula realizada do aluno
+    if (schedule.status === 'completed' && student && (student.classesdone || 0) > 0) {
+      await supabase.from('students').update({ classesdone: Math.max(0, student.classesdone - 1) }).eq('id', studentId);
+    }
+    fetchSchedules();
+    fetchStudents();
+  };
+
   const handleOpenReschedule = (schedule) => {
     setSelectedSchedule(schedule);
     setRescheduleData({ date: schedule.date, time: schedule.time });
@@ -556,32 +569,46 @@ export default function App() {
     setShowRescheduleModal(false);
   };
 
-  // REAGENDAR DEPOIS (GERAR VOUCHER SEM NOVA DATA DE IMEDIATO)
-  const handleRescheduleLater = async (scheduleId, studentId) => {
+  const handleRescheduleLater = async (scheduleId, studentId, currentStatus) => {
     const student = students.find(s => s.id === studentId);
     const now = new Date();
-    // Validade: mês vigente + próximo mês (último dia do mês seguinte)
     const expiry = new Date(now.getFullYear(), now.getMonth() + 2, 0);
     const expiryStr = expiry.toLocaleDateString('pt-BR');
 
     await supabase.from('schedules').update({ status: 'cancelled' }).eq('id', scheduleId);
+    
     if (student) {
-      await supabase.from('students').update({ vouchers: (student.vouchers || 0) + 1 }).eq('id', studentId);
+      const updates = { vouchers: (student.vouchers || 0) + 1 };
+      // Se estava concluída antes, subtrai a aula feita equivocadamente
+      if (currentStatus === 'completed' && (student.classesdone || 0) > 0) {
+        updates.classesdone = Math.max(0, student.classesdone - 1);
+      }
+      await supabase.from('students').update(updates).eq('id', studentId);
     }
+
     fetchSchedules();
     fetchStudents();
     setShowRescheduleModal(false);
-    alert(`Aula desmarcada! Voucher de reposição adicionado para ${student ? student.name : 'o aluno'}. Validade até ${expiryStr}.`);
+    alert(`Aula desmarcada/ajustada! Voucher de reposição adicionado para ${student ? student.name : 'o aluno'}. Validade até ${expiryStr}.`);
   };
 
-  const handleNoShow = async (scheduleId, studentId) => {
+  const handleNoShow = async (scheduleId, studentId, currentStatus) => {
     const student = students.find(s => s.id === studentId);
     await supabase.from('schedules').update({ status: 'no-show' }).eq('id', scheduleId);
-    if (student) {
+    
+    if (student && currentStatus !== 'completed' && currentStatus !== 'no-show') {
       await supabase.from('students').update({ classesdone: (student.classesdone || 0) + 1 }).eq('id', studentId);
     }
     fetchSchedules();
     fetchStudents();
+  };
+
+  const handleDeleteSchedule = async (scheduleId) => {
+    if (window.confirm('Tem certeza que deseja EXCLUIR este agendamento do histórico?')) {
+      const { error } = await supabase.from('schedules').delete().eq('id', scheduleId);
+      if (error) alert('Erro ao excluir: ' + error.message);
+      else fetchSchedules();
+    }
   };
 
   const openWhatsApp = (phone, name) => {
@@ -853,7 +880,7 @@ export default function App() {
                             <h3 className="text-base font-bold text-slate-900">{s.studentname}</h3>
                             <span className="text-xs text-slate-500">{s.date}</span>
                           </div>
-                          <div>
+                          <div className="flex flex-col items-end gap-1">
                             {s.status === 'completed' && <span className="bg-emerald-100 text-emerald-700 text-xs font-bold px-2.5 py-1 rounded-full">Realizada</span>}
                             {s.status === 'cancelled' && <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2.5 py-1 rounded-full">Reagendada</span>}
                             {s.status === 'no-show' && <span className="bg-rose-100 text-rose-700 text-xs font-bold px-2.5 py-1 rounded-full">Falta (&lt;12h)</span>}
@@ -862,25 +889,43 @@ export default function App() {
                           </div>
                         </div>
 
-                        {s.status === 'pending' && (
-                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                        {/* PAINEL DE AÇÕES DISPONÍVEL PARA QUALQUER STATUS (INCLUSIVE AULAS JÁ REALIZADAS) */}
+                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                          {s.status !== 'completed' ? (
                             <button onClick={() => handleCheckIn(s.id, s.studentid)} className="bg-emerald-600 text-white py-2 px-3 rounded-xl text-xs font-bold">
                               ✓ Check-in
                             </button>
-                            <button onClick={() => handleOpenReschedule(s)} className="bg-indigo-600 text-white py-2 px-3 rounded-xl text-xs font-bold">
-                              📅 Mudar Data/Hora
+                          ) : (
+                            <button onClick={() => handleResetToPending(s, s.studentid)} className="bg-slate-700 text-white py-2 px-3 rounded-xl text-xs font-bold">
+                              ↩ Voltar a Pendente
                             </button>
-                            <button onClick={() => handleRescheduleLater(s.id, s.studentid)} className="bg-amber-500 text-white py-2 px-3 rounded-xl text-xs font-bold">
-                              ↺ Reagendar Depois (Voucher)
-                            </button>
-                            <button onClick={() => handleNoShow(s.id, s.studentid)} className="bg-rose-600 text-white py-2 px-3 rounded-xl text-xs font-bold">
-                              ✕ Falta (&lt;12h)
-                            </button>
-                          </div>
-                        )}
+                          )}
+                          
+                          <button onClick={() => handleOpenReschedule(s)} className="bg-indigo-600 text-white py-2 px-3 rounded-xl text-xs font-bold">
+                            📅 Mudar Data/Hora
+                          </button>
+                          
+                          <button onClick={() => handleRescheduleLater(s.id, s.studentid, s.status)} className="bg-amber-500 text-white py-2 px-3 rounded-xl text-xs font-bold">
+                            ↺ Reagendar (Voucher)
+                          </button>
+                          
+                          <button onClick={() => handleNoShow(s.id, s.studentid, s.status)} className="bg-rose-600 text-white py-2 px-3 rounded-xl text-xs font-bold">
+                            ✕ Falta (&lt;12h)
+                          </button>
+                        </div>
+
+                        {/* BOTAO PARA EXCLUIR AGENDAMENTO INDEVIDO DO HISTORICO */}
+                        <div className="text-right pt-1">
+                          <button onClick={() => handleDeleteSchedule(s.id)} className="text-[10px] text-rose-500 hover:text-rose-700 font-semibold underline">
+                            🗑️ Excluir Agendamento
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
+                {filteredSchedules.filter(s => s.date === formatDateYYYYMMDD(currentDate)).length === 0 && (
+                  <p className="text-center text-slate-400 py-8 text-sm">Nenhum agendamento para este dia.</p>
+                )}
               </div>
             )}
 
@@ -1583,7 +1628,7 @@ export default function App() {
             <div className="border-t pt-3 space-y-2">
               <button 
                 type="button" 
-                onClick={() => handleRescheduleLater(selectedSchedule.id, selectedSchedule.studentid)}
+                onClick={() => handleRescheduleLater(selectedSchedule.id, selectedSchedule.studentid, selectedSchedule.status)}
                 className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow"
               >
                 ↺ Reagendar Depois (Gerar Voucher)
