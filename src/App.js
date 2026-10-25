@@ -34,9 +34,15 @@ export default function App() {
   const [students, setStudents] = useState([]);
   const [schedules, setSchedules] = useState([]);
   const [units, setUnits] = useState([]);
-  const [selectedUnit, setSelectedUnit] = useState('Todas');
   const [pixKey, setPixKey] = useState(localStorage.getItem('pix_key') || '');
   
+  // --- ESTADOS DA AGENDA (VISÕES E FILTROS) ---
+  const [calendarView, setCalendarView] = useState('dia'); // 'dia', 'semana', 'mes'
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [searchStudent, setSearchStudent] = useState('');
+  const [filterUnit, setFilterUnit] = useState('Todas');
+  const [filterTurn, setFilterTurn] = useState('Todos'); // 'Todos', 'Manhã', 'Tarde', 'Noite'
+
   // Modais
   const [showStudentModal, setShowStudentModal] = useState(false);
   const [editingStudentId, setEditingStudentId] = useState(null);
@@ -121,9 +127,43 @@ export default function App() {
     }
   };
 
-  // --- GESTÃO DE ALUNOS ---
   const activeUnitsList = units.filter(u => u.active).map(u => u.name);
 
+  // --- NAVEGAÇÃO DE DATAS NA AGENDA ---
+  const navigateDate = (amount) => {
+    const newDate = new Date(currentDate);
+    if (calendarView === 'dia') {
+      newDate.setDate(newDate.getDate() + amount);
+    } else if (calendarView === 'semana') {
+      newDate.setDate(newDate.getDate() + (amount * 7));
+    } else if (calendarView === 'mes') {
+      newDate.setMonth(newDate.getMonth() + amount);
+    }
+    setCurrentDate(newDate);
+  };
+
+  const formatDateYYYYMMDD = (d) => d.toISOString().split('T')[0];
+
+  // Helper para verificar turno
+  const matchesTurn = (timeStr, turn) => {
+    if (turn === 'Todos' || !timeStr) return true;
+    const hour = parseInt(timeStr.split(':')[0], 10);
+    if (isNaN(hour)) return true;
+    if (turn === 'Manhã') return hour >= 5 && hour < 12;
+    if (turn === 'Tarde') return hour >= 12 && hour < 18;
+    if (turn === 'Noite') return hour >= 18 && hour <= 23;
+    return true;
+  };
+
+  // Filtragem Geral de Agendamentos
+  const filteredSchedules = schedules.filter(s => {
+    const matchStudent = searchStudent ? s.studentname.toLowerCase().includes(searchStudent.toLowerCase()) : true;
+    const matchUnit = filterUnit === 'Todas' ? true : s.unit === filterUnit;
+    const matchTurn = matchesTurn(s.time, filterTurn);
+    return matchStudent && matchUnit && matchTurn;
+  });
+
+  // --- GESTÃO DE ALUNOS ---
   const handleOpenStudentModal = (student = null) => {
     const defaultUnit = activeUnitsList[0] || 'Atendimento Domiciliar';
     if (student) {
@@ -353,6 +393,24 @@ export default function App() {
     );
   }
 
+  // Helper para gerar os dias do mês
+  const getDaysInMonthGrid = (date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1).getDay();
+    const totalDays = new Date(year, month + 1, 0).getDate();
+    
+    const days = [];
+    for (let i = 0; i < firstDay; i++) {
+      days.push(null);
+    }
+    for (let d = 1; d <= totalDays; d++) {
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      days.push({ day: d, dateStr });
+    }
+    return days;
+  };
+
   return (
     <div className="min-h-screen bg-slate-100 pb-20 font-sans">
       <header className="bg-slate-900 text-white p-4 sticky top-0 z-40 shadow-md flex justify-between items-center">
@@ -376,83 +434,177 @@ export default function App() {
               <h2 className="text-xl font-bold text-slate-800">Agenda Master</h2>
               <button 
                 onClick={() => setShowScheduleModal(true)}
-                className="bg-indigo-600 text-white p-2.5 rounded-xl flex items-center gap-1.5 text-sm font-semibold shadow"
+                className="bg-indigo-600 text-white p-2 py-2.5 rounded-xl flex items-center gap-1 text-xs font-bold shadow"
               >
                 + Novo Agendamento
               </button>
             </div>
 
-            <div className="flex gap-2 overflow-x-auto pb-2 items-center">
-              <button 
-                onClick={() => setSelectedUnit('Todas')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-full whitespace-nowrap ${selectedUnit === 'Todas' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 border'}`}
-              >
-                Todas Unidades
-              </button>
-              {activeUnitsList.map(u => (
-                <button 
-                  key={u}
-                  onClick={() => setSelectedUnit(u)}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-full whitespace-nowrap ${selectedUnit === u ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 border'}`}
-                >
-                  {u}
-                </button>
-              ))}
-              <button onClick={() => setShowUnitsModal(true)} className="px-2.5 py-1.5 text-xs font-bold text-indigo-600 border border-indigo-200 bg-indigo-50 rounded-full whitespace-nowrap">
-                ⚙️ Unidades
-              </button>
+            {/* BARRA DE FILTROS & PESQUISA */}
+            <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm space-y-2.5">
+              <input 
+                type="text" 
+                placeholder="🔍 Buscar aluno..." 
+                value={searchStudent}
+                onChange={e => setSearchStudent(e.target.value)}
+                className="w-full p-2 border rounded-xl text-xs"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 block mb-0.5">Unidade</label>
+                  <select value={filterUnit} onChange={e => setFilterUnit(e.target.value)} className="w-full p-1.5 border rounded-lg text-xs">
+                    <option value="Todas">Todas Unidades</option>
+                    {activeUnitsList.map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 block mb-0.5">Turno</label>
+                  <select value={filterTurn} onChange={e => setFilterTurn(e.target.value)} className="w-full p-1.5 border rounded-lg text-xs">
+                    <option value="Todos">Todos Turnos</option>
+                    <option value="Manhã">Manhã (05h-12h)</option>
+                    <option value="Tarde">Tarde (12h-18h)</option>
+                    <option value="Noite">Noite (18h-23h)</option>
+                  </select>
+                </div>
+              </div>
             </div>
 
-            <div className="space-y-3">
-              {schedules
-                .filter(s => selectedUnit === 'Todas' || s.unit === selectedUnit)
-                .map((s) => {
-                  const delayed = isDelayed(s.date, s.time, s.status);
-                  return (
-                    <div key={s.id} className={`p-4 rounded-2xl bg-white border shadow-sm space-y-3 relative ${delayed ? 'border-amber-500 ring-2 ring-amber-400/30' : 'border-slate-200'}`}>
-                      {s.isbonus && (
-                        <span className="absolute top-0 right-0 bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-bl-lg">
-                          5ª Sem. Bônus (R$ 0,00)
-                        </span>
-                      )}
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <span className="text-xs font-bold text-indigo-600 uppercase">{s.time} • {s.unit}</span>
-                          <h3 className="text-base font-bold text-slate-900">{s.studentname}</h3>
-                          <span className="text-xs text-slate-500">{s.date}</span>
+            {/* SELETOR DE VISÃO & NAVEGAÇÃO DE DATAS */}
+            <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+              <div className="flex justify-between items-center bg-slate-100 p-1 rounded-xl">
+                <button 
+                  onClick={() => setCalendarView('dia')}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${calendarView === 'dia' ? 'bg-indigo-600 text-white shadow' : 'text-slate-600'}`}
+                >
+                  Dia
+                </button>
+                <button 
+                  onClick={() => setCalendarView('semana')}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${calendarView === 'semana' ? 'bg-indigo-600 text-white shadow' : 'text-slate-600'}`}
+                >
+                  Semana
+                </button>
+                <button 
+                  onClick={() => setCalendarView('mes')}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${calendarView === 'mes' ? 'bg-indigo-600 text-white shadow' : 'text-slate-600'}`}
+                >
+                  Mês
+                </button>
+              </div>
+
+              {/* Controles de Data */}
+              <div className="flex justify-between items-center px-1">
+                <button onClick={() => navigateDate(-1)} className="p-1.5 bg-slate-100 rounded-lg text-xs font-bold">◀ Anterior</button>
+                <span className="text-xs font-bold text-slate-800">
+                  {calendarView === 'dia' && currentDate.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
+                  {calendarView === 'semana' && `Semana de ${currentDate.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}`}
+                  {calendarView === 'mes' && currentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase()}
+                </span>
+                <button onClick={() => navigateDate(1)} className="p-1.5 bg-slate-100 rounded-lg text-xs font-bold">Próximo ▶</button>
+              </div>
+            </div>
+
+            {/* --- EXIBIÇÃO: VISÃO DIA OU SEMANA --- */}
+            {(calendarView === 'dia' || calendarView === 'semana') && (
+              <div className="space-y-3">
+                {filteredSchedules
+                  .filter(s => {
+                    if (calendarView === 'dia') {
+                      return s.date === formatDateYYYYMMDD(currentDate);
+                    } else {
+                      const sDate = new Date(`${s.date}T00:00:00`);
+                      const startWeek = new Date(currentDate);
+                      startWeek.setDate(currentDate.getDate() - currentDate.getDay());
+                      const endWeek = new Date(startWeek);
+                      endWeek.setDate(startWeek.getDate() + 6);
+                      return sDate >= startWeek && sDate <= endWeek;
+                    }
+                  })
+                  .map((s) => {
+                    const delayed = isDelayed(s.date, s.time, s.status);
+                    return (
+                      <div key={s.id} className={`p-4 rounded-2xl bg-white border shadow-sm space-y-3 relative ${delayed ? 'border-amber-500 ring-2 ring-amber-400/30' : 'border-slate-200'}`}>
+                        {s.isbonus && (
+                          <span className="absolute top-0 right-0 bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-bl-lg">
+                            5ª Sem. Bônus (R$ 0,00)
+                          </span>
+                        )}
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="text-xs font-bold text-indigo-600 uppercase">{s.time} • {s.unit}</span>
+                            <h3 className="text-base font-bold text-slate-900">{s.studentname}</h3>
+                            <span className="text-xs text-slate-500">{s.date}</span>
+                          </div>
+                          <div>
+                            {s.status === 'completed' && <span className="bg-emerald-100 text-emerald-700 text-xs font-bold px-2.5 py-1 rounded-full">Realizada</span>}
+                            {s.status === 'cancelled' && <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2.5 py-1 rounded-full">Reagendada</span>}
+                            {s.status === 'no-show' && <span className="bg-rose-100 text-rose-700 text-xs font-bold px-2.5 py-1 rounded-full">Falta (&lt;12h)</span>}
+                            {s.status === 'pending' && !delayed && <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2.5 py-1 rounded-full">Pendente</span>}
+                            {delayed && <span className="bg-amber-500 text-white text-xs font-bold px-2.5 py-1 rounded-full animate-pulse">Atrasado (+15m)</span>}
+                          </div>
                         </div>
-                        <div>
-                          {s.status === 'completed' && <span className="bg-emerald-100 text-emerald-700 text-xs font-bold px-2.5 py-1 rounded-full">Realizada</span>}
-                          {s.status === 'cancelled' && <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2.5 py-1 rounded-full">Reagendada</span>}
-                          {s.status === 'no-show' && <span className="bg-rose-100 text-rose-700 text-xs font-bold px-2.5 py-1 rounded-full">Falta (&lt;12h)</span>}
-                          {s.status === 'pending' && !delayed && <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2.5 py-1 rounded-full">Pendente</span>}
-                          {delayed && <span className="bg-amber-500 text-white text-xs font-bold px-2.5 py-1 rounded-full animate-pulse">Atrasado (+15m)</span>}
+
+                        {s.status === 'pending' && (
+                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                            <button onClick={() => handleCheckIn(s.id, s.studentid)} className="bg-emerald-600 text-white py-2 px-3 rounded-xl text-xs font-bold">
+                              ✓ Check-in
+                            </button>
+                            <button onClick={() => handleOpenReschedule(s)} className="bg-indigo-600 text-white py-2 px-3 rounded-xl text-xs font-bold">
+                              📅 Remanejar
+                            </button>
+                            <button onClick={() => handleCancelWithReagenda(s.id, s.studentid)} className="bg-amber-500 text-white py-2 px-3 rounded-xl text-xs font-bold">
+                              ↺ Cancelar (&gt;12h)
+                            </button>
+                            <button onClick={() => handleNoShow(s.id, s.studentid)} className="bg-rose-600 text-white py-2 px-3 rounded-xl text-xs font-bold">
+                              ✕ Falta (&lt;12h)
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+
+            {/* --- EXIBIÇÃO: VISÃO MÊS INTEIRO (CALENDÁRIO GRADE) --- */}
+            {calendarView === 'mes' && (
+              <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm space-y-2">
+                <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-slate-400">
+                  <span>Dom</span><span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span>
+                </div>
+                <div className="grid grid-cols-7 gap-1">
+                  {getDaysInMonthGrid(currentDate).map((d, index) => {
+                    if (!d) return <div key={index} className="h-20 bg-slate-50/50 rounded-lg"></div>;
+                    
+                    const daySchedules = filteredSchedules.filter(s => s.date === d.dateStr);
+                    const isToday = d.dateStr === formatDateYYYYMMDD(new Date());
+
+                    return (
+                      <div 
+                        key={d.dateStr} 
+                        onClick={() => {
+                          setCurrentDate(new Date(`${d.dateStr}T00:00:00`));
+                          setCalendarView('dia');
+                        }}
+                        className={`h-20 border rounded-lg p-1 text-[9px] overflow-hidden cursor-pointer flex flex-col justify-between transition ${isToday ? 'border-indigo-600 bg-indigo-50/30' : 'border-slate-100 bg-white hover:bg-slate-50'}`}
+                      >
+                        <span className={`font-bold ${isToday ? 'text-indigo-600' : 'text-slate-700'}`}>{d.day}</span>
+                        <div className="space-y-0.5 overflow-y-auto">
+                          {daySchedules.map(st => (
+                            <div 
+                              key={st.id} 
+                              className={`px-1 py-0.5 rounded text-[8px] truncate font-semibold ${st.status === 'completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'}`}
+                            >
+                              {st.studentname.split(' ')[0]}
+                            </div>
+                          ))}
                         </div>
                       </div>
-
-                      {s.status === 'pending' && (
-                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
-                          <button onClick={() => handleCheckIn(s.id, s.studentid)} className="bg-emerald-600 text-white py-2 px-3 rounded-xl text-xs font-bold">
-                            ✓ Check-in
-                          </button>
-                          <button onClick={() => handleOpenReschedule(s)} className="bg-indigo-600 text-white py-2 px-3 rounded-xl text-xs font-bold">
-                            📅 Remanejar
-                          </button>
-                          <button onClick={() => handleCancelWithReagenda(s.id, s.studentid)} className="bg-amber-500 text-white py-2 px-3 rounded-xl text-xs font-bold">
-                            ↺ Cancelar (&gt;12h)
-                          </button>
-                          <button onClick={() => handleNoShow(s.id, s.studentid)} className="bg-rose-600 text-white py-2 px-3 rounded-xl text-xs font-bold">
-                            ✕ Falta (&lt;12h)
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              {schedules.length === 0 && (
-                <p className="text-center text-slate-400 py-8 text-sm">Nenhuma aula agendada.</p>
-              )}
-            </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
