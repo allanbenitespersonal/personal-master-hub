@@ -32,6 +32,23 @@ const MODALIDADES = ['Consultoria', 'Híbrido', 'Presencial'];
 const SEXO_OPTIONS = ['Masculino', 'Feminino', 'Outro', 'Não informado'];
 const FORMAS_PAGAMENTO = ['Pix', 'Dinheiro', 'Cartão de Crédito', 'Cartão de Débito', 'Misto / Dividido'];
 
+// DATAS E AÇÕES DE MARKETING & PROSPECCÃO (2026/2027)
+const DATAS_MARKETING = [
+  { data: '08/03', nome: 'Dia Internacional da Mulher', tipo: 'Promocional', publico: 'Feminino', ideia: 'Desconto de 20% no 1º mês para alunas novas ou voucher presente.' },
+  { data: '15/03', nome: 'Dia do Consumidor', tipo: 'Promocional', publico: 'Geral', ideia: 'Oferta relâmpago de matrícula zero + avaliação grátis.' },
+  { data: '21/04', nome: 'Tiradentes (Feriado)', tipo: 'Feriado Nacional', publico: 'Geral', ideia: 'Treino especial ao ar livre / Aulão de feriado.' },
+  { data: '01/05', nome: 'Dia do Trabalho (Feriado)', tipo: 'Feriado Nacional', publico: 'Trabalhadores', ideia: 'Campanha "Invista na sua saúde pós-trabalho".' },
+  { data: '10/05', nome: 'Dia das Mães', tipo: 'Promocional', publico: 'Mães / Filhos', ideia: 'Plano em dupla Mãe & Filho(a) com condição especial.' },
+  { data: '12/06', nome: 'Dia dos Namorados', tipo: 'Promocional', publico: 'Casais', ideia: 'Treino em Dupla: Pague 1 e treinem 2 durante 1 mês.' },
+  { data: '09/08', nome: 'Dia dos Pais', tipo: 'Promocional', publico: 'Pais', ideia: 'Campanha "Pai em Forma" - Consultoria ou Personal presencial.' },
+  { data: '01/09', nome: 'Dia do Ed. Físico / Personal', tipo: 'Especial', publico: 'Geral', ideia: 'Semana do Personal Trainer: Avaliação física biomecânica gratuita.' },
+  { data: '20/09', dataGaucha: true, nome: 'Revolução Farroupilha (RS)', tipo: 'Feriado Regional', publico: 'RS / Poa', ideia: 'Campanha "Força e Tradição": Aulão temático.' },
+  { data: '12/10', nome: 'Nossa Sra. Aparecida (Feriado)', tipo: 'Feriado Nacional', publico: 'Geral', ideia: 'Ação para pais e mães.' },
+  { data: '28/10', nome: 'Dia do Servidor Público', tipo: 'Promocional', publico: 'Funcionalismo', ideia: 'Desconto exclusivo para funcionários públicos e conveniados.' },
+  { data: '27/11', nome: 'Black Friday', tipo: 'Promocional', publico: 'Geral', ideia: 'Maior oferta do ano: Desconto em planos semestrais ou anuais.' },
+  { data: '25/12', nome: 'Natal', tipo: 'Feriado Nacional', publico: 'Geral', ideia: 'Vouchers de presente de Natal para familiares de alunos.' }
+];
+
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
@@ -64,6 +81,7 @@ export default function App() {
   const [searchStudentTab, setSearchStudentTab] = useState('');
   const [filterStatusTab, setFilterStatusTab] = useState('Todos');
   const [filterModalityTab, setFilterModalityTab] = useState('Todas');
+  const [filterBirthdayMonthTab, setFilterBirthdayMonthTab] = useState('Todos');
 
   // --- FINANCEIRO AVANÇADO ---
   const [filterRefMonth, setFilterRefMonth] = useState(`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`);
@@ -411,12 +429,16 @@ export default function App() {
 
     const matchStatus = filterStatusTab === 'Todos' || 
       (filterStatusTab === 'Ativos' && isActive) || 
-      (filterStatusTab === 'Inativos' && !isActive);
+      (filterStatusTab === 'Inativos' && !isActive) ||
+      (filterStatusTab === 'Vouchers' && (st.vouchers || 0) > 0);
 
     const matchModality = filterModalityTab === 'Todas' || 
       (st.modality || 'Presencial') === filterModalityTab;
 
-    return matchText && matchStatus && matchModality;
+    const matchBirthday = filterBirthdayMonthTab === 'Todos' ||
+      (st.birthdate && parseInt(st.birthdate.split('-')[1], 10) === Number(filterBirthdayMonthTab));
+
+    return matchText && matchStatus && matchModality && matchBirthday;
   });
 
   const handleOpenStudentModal = (student = null) => {
@@ -501,12 +523,6 @@ export default function App() {
     }
     fetchStudents();
     setShowStudentModal(false);
-  };
-
-  const handleUpdateStudentFee = async (studentId, newFee) => {
-    const { error } = await supabase.from('students').update({ monthly_fee: Number(newFee) }).eq('id', studentId);
-    if (error) alert('Erro ao atualizar valor: ' + error.message);
-    else fetchStudents();
   };
 
   const handleToggleActive = async (student) => {
@@ -639,8 +655,8 @@ export default function App() {
     }
   };
 
-  const openWhatsApp = (phone, name) => {
-    const message = encodeURIComponent(`Olá ${name}, tudo bem? Confirmando nossa aula de Personal!`);
+  const openWhatsApp = (phone, name, customMsg = null) => {
+    const message = encodeURIComponent(customMsg || `Olá ${name}, tudo bem? Confirmando nossa aula de Personal!`);
     window.open(`https://wa.me/55${phone.replace(/\D/g, '')}?text=${message}`, '_blank');
   };
 
@@ -670,7 +686,7 @@ export default function App() {
   // --- OBTÉM OS DIAS DA SEMANA (SEGUNDA A DOMINGO) ---
   const getWeekDaysArray = (date) => {
     const tempDate = new Date(date);
-    const dayOfWeek = tempDate.getDay(); // 0 (Dom) a 6 (Sáb)
+    const dayOfWeek = tempDate.getDay();
     const distanceToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
     
     const mondayDate = new Date(tempDate);
@@ -719,6 +735,29 @@ export default function App() {
   const currentMonthTransactions = transactions.filter(t => t.reference_month === currentMonthRefStr);
   const currentMonthRevenue = currentMonthTransactions.reduce((acc, t) => acc + Number(t.amount || 0), 0);
 
+  // NAVEGAÇÕES DOS WIDGETS
+  const goToActiveStudents = () => {
+    setFilterStatusTab('Ativos');
+    setFilterBirthdayMonthTab('Todos');
+    setActiveTab('alunos');
+  };
+
+  const goToBirthdayStudents = () => {
+    setFilterStatusTab('Todos');
+    setFilterBirthdayMonthTab('Todos'); // Mostra ano inteiro
+    setActiveTab('alunos');
+  };
+
+  const goToFinanceTab = () => {
+    setActiveTab('financeiro');
+  };
+
+  const goToVouchers = () => {
+    setFilterStatusTab('Vouchers');
+    setFilterBirthdayMonthTab('Todos');
+    setActiveTab('alunos');
+  };
+
   // --- FILTRAGEM DE TRANSAÇÕES FINANCEIRAS ---
   const filteredTransactions = transactions.filter(t => {
     const matchMonth = filterRefMonth === 'Todos' || !filterRefMonth ? true : (t.reference_month === filterRefMonth);
@@ -732,7 +771,6 @@ export default function App() {
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-[#070a12] text-white flex flex-col items-center justify-center p-6 relative overflow-hidden">
-        {/* LANTERNA SPOTLIGHT LOGIN */}
         <div 
           className="pointer-events-none fixed inset-0 z-0 transition-opacity duration-300"
           style={{
@@ -781,7 +819,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#070a12] text-slate-100 pb-24 font-sans relative overflow-x-hidden selection:bg-blue-600 selection:text-white">
-      {/* EFEITO LANTERNA (SPOTLIGHT CURSOR) */}
+      {/* EFEITO LANTERNA */}
       <div 
         className="pointer-events-none fixed inset-0 z-0 transition-opacity duration-300"
         style={{
@@ -823,41 +861,53 @@ export default function App() {
               </span>
             </div>
 
-            {/* KPIS PRINCIPAIS (WIDGETS SUPERIORES) */}
+            {/* KPIS PRINCIPAIS COM LINKS Clicáveis */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="bg-[#0e1422]/80 backdrop-blur-md p-4 rounded-3xl border border-slate-800/80 shadow-xl space-y-1 relative overflow-hidden group hover:border-blue-500/50 transition">
+              <div 
+                onClick={goToActiveStudents}
+                className="bg-[#0e1422]/80 backdrop-blur-md p-4 rounded-3xl border border-slate-800/80 shadow-xl space-y-1 relative overflow-hidden group hover:border-blue-500 cursor-pointer transition"
+              >
                 <div className="absolute top-0 right-0 w-16 h-16 bg-blue-500/10 rounded-full blur-xl group-hover:bg-blue-500/20 transition"></div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Clientes Ativos</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Clientes Ativos ➔</span>
                 <div className="flex items-baseline justify-between">
                   <span className="text-2xl font-black text-white">{activeStudents.length}</span>
-                  <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/50 px-2 py-0.5 rounded-full border border-emerald-800/40">+100%</span>
+                  <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/50 px-2 py-0.5 rounded-full border border-emerald-800/40">Ver Alunos</span>
                 </div>
               </div>
 
-              <div className="bg-[#0e1422]/80 backdrop-blur-md p-4 rounded-3xl border border-slate-800/80 shadow-xl space-y-1 relative overflow-hidden group hover:border-blue-500/50 transition">
+              <div 
+                onClick={() => setActiveTab('agenda')}
+                className="bg-[#0e1422]/80 backdrop-blur-md p-4 rounded-3xl border border-slate-800/80 shadow-xl space-y-1 relative overflow-hidden group hover:border-indigo-500 cursor-pointer transition"
+              >
                 <div className="absolute top-0 right-0 w-16 h-16 bg-indigo-500/10 rounded-full blur-xl group-hover:bg-indigo-500/20 transition"></div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Aulas na Semana</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Aulas na Semana ➔</span>
                 <div className="flex items-baseline justify-between">
                   <span className="text-2xl font-black text-indigo-400">{weekSchedulesDone.length}</span>
-                  <span className="text-[10px] font-medium text-slate-400">Concluídas</span>
+                  <span className="text-[10px] font-medium text-slate-400">Ver Agenda</span>
                 </div>
               </div>
 
-              <div className="bg-[#0e1422]/80 backdrop-blur-md p-4 rounded-3xl border border-slate-800/80 shadow-xl space-y-1 relative overflow-hidden group hover:border-blue-500/50 transition">
+              <div 
+                onClick={goToFinanceTab}
+                className="bg-[#0e1422]/80 backdrop-blur-md p-4 rounded-3xl border border-slate-800/80 shadow-xl space-y-1 relative overflow-hidden group hover:border-emerald-500 cursor-pointer transition"
+              >
                 <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/10 rounded-full blur-xl group-hover:bg-emerald-500/20 transition"></div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Receita no Mês</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Receita no Mês ➔</span>
                 <div className="flex items-baseline justify-between">
                   <span className="text-2xl font-black text-emerald-400">R$ {currentMonthRevenue.toLocaleString('pt-BR')}</span>
-                  <span className="text-[10px] font-bold text-emerald-400">Quitado</span>
+                  <span className="text-[10px] font-bold text-emerald-400">Financeiro</span>
                 </div>
               </div>
 
-              <div className="bg-[#0e1422]/80 backdrop-blur-md p-4 rounded-3xl border border-slate-800/80 shadow-xl space-y-1 relative overflow-hidden group hover:border-blue-500/50 transition">
+              <div 
+                onClick={goToVouchers}
+                className="bg-[#0e1422]/80 backdrop-blur-md p-4 rounded-3xl border border-slate-800/80 shadow-xl space-y-1 relative overflow-hidden group hover:border-amber-500 cursor-pointer transition"
+              >
                 <div className="absolute top-0 right-0 w-16 h-16 bg-amber-500/10 rounded-full blur-xl group-hover:bg-amber-500/20 transition"></div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Vouchers Pendentes</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Vouchers Pendentes ➔</span>
                 <div className="flex items-baseline justify-between">
                   <span className="text-2xl font-black text-amber-400">{voucherStudents.reduce((acc, s) => acc + (s.vouchers || 0), 0)}</span>
-                  <span className="text-[10px] font-medium text-slate-400">Aulas</span>
+                  <span className="text-[10px] font-medium text-slate-400">Ver Lista</span>
                 </div>
               </div>
             </div>
@@ -911,11 +961,16 @@ export default function App() {
 
               {/* CARD: ANIVERSARIANTES & AVISOS */}
               <div className="space-y-4">
-                {/* ANIVERSARIANTES */}
-                <div className="bg-[#0e1422]/80 backdrop-blur-md p-5 rounded-3xl border border-slate-800/80 shadow-xl space-y-3">
+                {/* ANIVERSARIANTES COM REDIRECIONAMENTO */}
+                <div 
+                  onClick={goToBirthdayStudents}
+                  className="bg-[#0e1422]/80 backdrop-blur-md p-5 rounded-3xl border border-slate-800/80 shadow-xl space-y-3 cursor-pointer hover:border-blue-500/50 transition"
+                >
                   <div className="flex justify-between items-center border-b border-slate-800/80 pb-2">
-                    <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">🎉 Aniversariantes do Mês</h3>
-                    <span className="text-[10px] font-bold text-blue-400">{birthdayStudents.length}</span>
+                    <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                      🎉 Aniversariantes do Mês ➔
+                    </h3>
+                    <span className="text-[10px] font-bold text-blue-400 bg-blue-950/60 border border-blue-800/40 px-2 py-0.5 rounded-lg">Ver Ano Todo</span>
                   </div>
 
                   <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
@@ -927,21 +982,30 @@ export default function App() {
                             {st.birthdate ? `${st.birthdate.split('-')[2]}/${st.birthdate.split('-')[1]}` : ''}
                           </p>
                         </div>
-                        <button onClick={() => openWhatsApp(st.whatsapp, st.name)} className="text-emerald-400 font-bold hover:underline text-[10px]">
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openWhatsApp(st.whatsapp, st.name, `Parabéns ${st.name}! Desejo um feliz aniversário, muita saúde e foco nos treinos! 🎉💪`);
+                          }} 
+                          className="text-emerald-400 font-bold hover:underline text-[10px]"
+                        >
                           Parabenizar
                         </button>
                       </div>
                     ))}
                     {birthdayStudents.length === 0 && (
-                      <p className="text-center text-xs text-slate-500 py-4">Sem aniversariantes neste mês.</p>
+                      <p className="text-center text-xs text-slate-500 py-4">Sem aniversariantes neste mês.Clique para ver os do ano.</p>
                     )}
                   </div>
                 </div>
 
                 {/* ALUNOS COM VOUCHERS */}
-                <div className="bg-[#0e1422]/80 backdrop-blur-md p-5 rounded-3xl border border-slate-800/80 shadow-xl space-y-3">
+                <div 
+                  onClick={goToVouchers}
+                  className="bg-[#0e1422]/80 backdrop-blur-md p-5 rounded-3xl border border-slate-800/80 shadow-xl space-y-3 cursor-pointer hover:border-amber-500/50 transition"
+                >
                   <div className="flex justify-between items-center border-b border-slate-800/80 pb-2">
-                    <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">🔄 Reposições Pendentes</h3>
+                    <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">🔄 Reposições Pendentes ➔</h3>
                   </div>
 
                   <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
@@ -1237,7 +1301,7 @@ export default function App() {
                 onChange={e => setSearchStudentTab(e.target.value)} 
                 className="w-full p-2.5 bg-[#080c16] border border-slate-800 rounded-2xl text-xs text-white focus:outline-none focus:border-blue-500" 
               />
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <div>
                   <label className="text-[10px] font-bold text-slate-400 block mb-0.5">Status</label>
                   <select 
@@ -1245,9 +1309,10 @@ export default function App() {
                     onChange={e => setFilterStatusTab(e.target.value)} 
                     className="w-full p-2 bg-[#080c16] border border-slate-800 rounded-xl text-xs text-white font-medium"
                   >
-                    <option value="Todos">Todos (Ativos/Inativos)</option>
-                    <option value="Ativos">Apenas Ativos</option>
-                    <option value="Inativos">Apenas Inativos</option>
+                    <option value="Todos">Todos</option>
+                    <option value="Ativos">Ativos</option>
+                    <option value="Inativos">Inativos</option>
+                    <option value="Vouchers">Com Vouchers</option>
                   </select>
                 </div>
                 <div>
@@ -1257,10 +1322,32 @@ export default function App() {
                     onChange={e => setFilterModalityTab(e.target.value)} 
                     className="w-full p-2 bg-[#080c16] border border-slate-800 rounded-xl text-xs text-white font-medium"
                   >
-                    <option value="Todas">Todas Modalidades</option>
+                    <option value="Todas">Todas</option>
                     <option value="Presencial">Presencial</option>
                     <option value="Híbrido">Híbrido</option>
                     <option value="Consultoria">Consultoria</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 block mb-0.5">Mês Aniversário</label>
+                  <select 
+                    value={filterBirthdayMonthTab} 
+                    onChange={e => setFilterBirthdayMonthTab(e.target.value)} 
+                    className="w-full p-2 bg-[#080c16] border border-slate-800 rounded-xl text-xs text-white font-medium"
+                  >
+                    <option value="Todos">Ano Inteiro</option>
+                    <option value="1">Jan</option>
+                    <option value="2">Fev</option>
+                    <option value="3">Mar</option>
+                    <option value="4">Abr</option>
+                    <option value="5">Mai</option>
+                    <option value="6">Jun</option>
+                    <option value="7">Jul</option>
+                    <option value="8">Ago</option>
+                    <option value="9">Set</option>
+                    <option value="10">Out</option>
+                    <option value="11">Nov</option>
+                    <option value="12">Dez</option>
                   </select>
                 </div>
               </div>
@@ -1286,12 +1373,9 @@ export default function App() {
                           )}
                         </div>
                         <p className="text-xs text-slate-400 mt-1">{st.unit} • {st.whatsapp}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-xs font-bold text-emerald-400">Base: R$ {st.monthly_fee || 0}/mês</span>
-                          <span className="text-[10px] font-bold text-blue-400 bg-blue-950/60 border border-blue-800/40 px-2 py-0.5 rounded-md">
-                            {st.preferred_payment || 'Pix'}
-                          </span>
-                        </div>
+                        <p className="text-[10px] text-blue-400 font-bold mt-0.5">
+                          🎂 Aniversário: {st.birthdate ? `${st.birthdate.split('-')[2]}/${st.birthdate.split('-')[1]}` : 'Não informado'}
+                        </p>
                       </div>
                       <button 
                         onClick={() => handleTogglePaymentStatusDirect(st)}
@@ -1520,6 +1604,56 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {/* --- ABA 5: PROSPECÇÃO & MARKETING --- */}
+        {activeTab === 'marketing' && (
+          <div className="space-y-4 max-w-2xl mx-auto">
+            <div className="flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-bold text-white">Prospecção & Marketing</h2>
+                <p className="text-xs text-slate-400">Calendário Comercial, Ofertas Relâmpago e Ações de Captação</p>
+              </div>
+              <span className="text-xs font-bold text-amber-400 bg-amber-950/60 border border-amber-800/50 px-3 py-1 rounded-full">
+                🚀 Ofertômetro
+              </span>
+            </div>
+
+            {/* LISTA DE DATAS E FERIADOS ESTRATÉGICOS */}
+            <div className="space-y-3">
+              {DATAS_MARKETING.map((item, idx) => (
+                <div key={idx} className="bg-[#0e1422]/90 backdrop-blur-md p-4 rounded-3xl border border-slate-800/80 shadow-xl space-y-2 hover:border-blue-500/50 transition">
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black text-blue-400 bg-blue-950/80 border border-blue-800/60 px-2.5 py-1 rounded-xl">
+                        {item.data}
+                      </span>
+                      <h3 className="font-bold text-white text-sm">{item.nome}</h3>
+                    </div>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${item.tipo === 'Promocional' ? 'bg-amber-950/60 text-amber-400 border-amber-800/50' : item.tipo === 'Feriado Regional' ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800/50' : 'bg-slate-800 text-slate-300 border-slate-700'}`}>
+                      {item.tipo}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-300 font-medium">
+                    🎯 <strong>Público-Alvo:</strong> {item.publico}
+                  </p>
+
+                  <div className="bg-[#080c16] p-3 rounded-2xl border border-slate-800/60 space-y-2">
+                    <p className="text-xs text-amber-300 font-semibold">💡 Ideia de Ação Relâmpago:</p>
+                    <p className="text-xs text-slate-300">{item.ideia}</p>
+                    <button 
+                      onClick={() => alert(`Cópia sugerida para disparar no WhatsApp:\n\n"Olá! Em comemoração ao ${item.nome}, preparei uma condição super especial para novos alunos nesta semana: ${item.ideia} Bora agendar sua avaliação experimental?"`)}
+                      className="text-[10px] font-bold text-blue-400 hover:text-blue-300 underline pt-1 block"
+                    >
+                      📋 Copiar Script de Divulgação
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
       </main>
 
       {/* --- MODAL DAR BAIXA EM PAGAMENTO --- */}
@@ -1893,7 +2027,7 @@ export default function App() {
         </div>
       )}
 
-      {/* --- BARRA DE NAVEGAÇÃO FIXA INFERIOR --- */}
+      {/* --- BARRA DE NAVEGAÇÃO FIXA INFERIOR COM NOVA ABA MARKETING --- */}
       <nav className="fixed bottom-0 left-0 right-0 bg-[#0b0f1a]/90 backdrop-blur-md border-t border-slate-800/80 p-2.5 z-40 flex justify-around">
         <button 
           onClick={() => setActiveTab('resumo')} 
@@ -1918,6 +2052,12 @@ export default function App() {
           className={`flex flex-col items-center gap-1 p-1.5 transition ${activeTab === 'financeiro' ? 'text-blue-400 font-bold scale-105' : 'text-slate-500 hover:text-slate-300'}`}
         >
           💲 <span className="text-[10px]">Financeiro</span>
+        </button>
+        <button 
+          onClick={() => setActiveTab('marketing')} 
+          className={`flex flex-col items-center gap-1 p-1.5 transition ${activeTab === 'marketing' ? 'text-amber-400 font-bold scale-105' : 'text-slate-500 hover:text-slate-300'}`}
+        >
+          🚀 <span className="text-[10px]">Marketing</span>
         </button>
       </nav>
     </div>
