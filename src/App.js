@@ -349,7 +349,6 @@ export default function App() {
     setCurrentDate(newDate);
   };
 
-  // FORMATADOR LOCAL YYYY-MM-DD
   const formatDateYYYYMMDD = (d) => {
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -557,10 +556,13 @@ export default function App() {
     setShowRescheduleModal(false);
   };
 
-  const handleCancelWithReagenda = async (scheduleId, studentId) => {
+  // REAGENDAR DEPOIS (GERAR VOUCHER SEM NOVA DATA DE IMEDIATO)
+  const handleRescheduleLater = async (scheduleId, studentId) => {
     const student = students.find(s => s.id === studentId);
     const now = new Date();
-    const expiry = new Date(now.getFullYear(), now.getMonth() + 2, 0).toISOString().split('T')[0];
+    // Validade: mês vigente + próximo mês (último dia do mês seguinte)
+    const expiry = new Date(now.getFullYear(), now.getMonth() + 2, 0);
+    const expiryStr = expiry.toLocaleDateString('pt-BR');
 
     await supabase.from('schedules').update({ status: 'cancelled' }).eq('id', scheduleId);
     if (student) {
@@ -568,7 +570,8 @@ export default function App() {
     }
     fetchSchedules();
     fetchStudents();
-    alert(`Aula cancelada! Voucher de reposição gerado. Validade: ${expiry}`);
+    setShowRescheduleModal(false);
+    alert(`Aula desmarcada! Voucher de reposição adicionado para ${student ? student.name : 'o aluno'}. Validade até ${expiryStr}.`);
   };
 
   const handleNoShow = async (scheduleId, studentId) => {
@@ -609,7 +612,6 @@ export default function App() {
     return diffMinutes > 15;
   };
 
-  // --- CORREÇÃO DA MATRIZ DA SEMANA (DOMINGO A SÁBADO SEM OFFSET) ---
   const getWeekDaysArray = (date) => {
     const tempDate = new Date(date);
     const dayOfWeek = tempDate.getDay();
@@ -631,7 +633,6 @@ export default function App() {
     return days;
   };
 
-  // --- CÁLCULOS FINANCEIROS ---
   const activeStudents = students.filter(st => st.active ?? true);
   const now = new Date();
 
@@ -820,7 +821,6 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Controles de Data */}
               <div className="flex justify-between items-center px-1">
                 <button onClick={() => navigateDate(-1)} className="p-1.5 bg-slate-100 rounded-lg text-xs font-bold">◀ Anterior</button>
                 <span className="text-xs font-bold text-slate-800">
@@ -868,10 +868,10 @@ export default function App() {
                               ✓ Check-in
                             </button>
                             <button onClick={() => handleOpenReschedule(s)} className="bg-indigo-600 text-white py-2 px-3 rounded-xl text-xs font-bold">
-                              📅 Remanejar
+                              📅 Mudar Data/Hora
                             </button>
-                            <button onClick={() => handleCancelWithReagenda(s.id, s.studentid)} className="bg-amber-500 text-white py-2 px-3 rounded-xl text-xs font-bold">
-                              ↺ Cancelar (&gt;12h)
+                            <button onClick={() => handleRescheduleLater(s.id, s.studentid)} className="bg-amber-500 text-white py-2 px-3 rounded-xl text-xs font-bold">
+                              ↺ Reagendar Depois (Voucher)
                             </button>
                             <button onClick={() => handleNoShow(s.id, s.studentid)} className="bg-rose-600 text-white py-2 px-3 rounded-xl text-xs font-bold">
                               ✕ Falta (&lt;12h)
@@ -884,7 +884,7 @@ export default function App() {
               </div>
             )}
 
-            {/* --- EXIBIÇÃO: VISÃO SEMANA CORRIGIDA (SEM SHIFT DE UTC) --- */}
+            {/* --- EXIBIÇÃO: VISÃO SEMANA --- */}
             {calendarView === 'semana' && (
               <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
                 <div className="grid grid-cols-7 gap-1.5 min-w-[650px]">
@@ -900,13 +900,11 @@ export default function App() {
                         key={wDay.dateStr} 
                         className={`border rounded-xl p-1.5 min-h-[300px] flex flex-col justify-start space-y-1.5 ${isToday ? 'border-indigo-600 bg-indigo-50/20' : 'border-slate-200 bg-slate-50/50'}`}
                       >
-                        {/* CABEÇALHO DO DIA */}
                         <div className={`text-center py-1 rounded-lg ${isToday ? 'bg-indigo-600 text-white font-bold' : 'bg-slate-200 text-slate-700 font-semibold'}`}>
                           <span className="text-[10px] uppercase block">{wDay.dayLabel}</span>
                           <span className="text-xs font-extrabold">{wDay.dayNumber}</span>
                         </div>
 
-                        {/* LISTA DE AULAS */}
                         <div className="space-y-1.5 overflow-y-auto">
                           {daySchedules.map(sc => (
                             <div 
@@ -1558,20 +1556,46 @@ export default function App() {
         </div>
       )}
 
-      {/* --- MODAL DE REMANEJAR HORÁRIO --- */}
+      {/* --- MODAL DE REMANEJAR HORÁRIO OU GERAR VOUCHER --- */}
       {showRescheduleModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl p-5 w-full max-w-sm space-y-4">
-            <h3 className="text-lg font-bold text-slate-900">Remanejar Aula</h3>
-            <p className="text-xs text-slate-500">Alterar data e horário de {selectedSchedule?.studentname}</p>
+            <h3 className="text-lg font-bold text-slate-900">Remanejar ou Desmarcar</h3>
+            <p className="text-xs text-slate-500">
+              Escolha uma nova data para <strong>{selectedSchedule?.studentname}</strong> ou libere o horário gerando um voucher de reposição.
+            </p>
+
             <form onSubmit={handleSaveReschedule} className="space-y-3">
-              <input required type="date" value={rescheduleData.date} onChange={e => setRescheduleData({...rescheduleData, date: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" />
-              <input required type="time" value={rescheduleData.time} onChange={e => setRescheduleData({...rescheduleData, time: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" />
-              <div className="flex gap-2 pt-2">
-                <button type="button" onClick={() => setShowRescheduleModal(false)} className="w-1/2 py-2.5 border rounded-xl text-sm font-bold text-slate-600">Cancelar</button>
-                <button type="submit" className="w-1/2 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold">Salvar Remanejamento</button>
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Nova Data</label>
+                <input type="date" value={rescheduleData.date} onChange={e => setRescheduleData({...rescheduleData, date: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" />
               </div>
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Novo Horário</label>
+                <input type="time" value={rescheduleData.time} onChange={e => setRescheduleData({...rescheduleData, time: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" />
+              </div>
+
+              <button type="submit" className="w-full py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold">
+                Confirmar Nova Data
+              </button>
             </form>
+
+            <div className="border-t pt-3 space-y-2">
+              <button 
+                type="button" 
+                onClick={() => handleRescheduleLater(selectedSchedule.id, selectedSchedule.studentid)}
+                className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow"
+              >
+                ↺ Reagendar Depois (Gerar Voucher)
+              </button>
+              <button 
+                type="button" 
+                onClick={() => setShowRescheduleModal(false)} 
+                className="w-full py-2 border rounded-xl text-xs font-bold text-slate-500"
+              >
+                Cancelar
+              </button>
+            </div>
           </div>
         </div>
       )}
