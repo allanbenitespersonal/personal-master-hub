@@ -16,11 +16,11 @@ const UNIDADES = [
 ];
 
 const PACK_OPTIONS = [
-  { label: '0 Aulas (Consultoria)', value: 0, price: 0 },
-  { label: '4 Aulas (1x/semana)', value: 4, price: 400 },
-  { label: '8 Aulas (2x/semana)', value: 8, price: 700 },
-  { label: '12 Aulas (3x/semana)', value: 12, price: 950 },
-  { label: '20 Aulas (5x/semana)', value: 20, price: 1400 },
+  { label: '0 Aulas (Consultoria)', value: 0 },
+  { label: '4 Aulas (1x/semana)', value: 4 },
+  { label: '8 Aulas (2x/semana)', value: 8 },
+  { label: '12 Aulas (3x/semana)', value: 12 },
+  { label: '20 Aulas (5x/semana)', value: 20 },
 ];
 
 const DIAS_SEMANA = [
@@ -55,7 +55,7 @@ export default function App() {
   // Formulários
   const [newStudent, setNewStudent] = useState({ 
     name: '', whatsapp: '', email: '', birthdate: '', gender: 'Feminino', modality: 'Presencial',
-    unit: UNIDADES[0], packtotal: 4, fixed_days: [], fixed_time: '08:00', cycle_type: 'mês_vigente', due_day: 5 
+    unit: UNIDADES[0], packtotal: 4, monthly_fee: 0, fixed_days: [], fixed_time: '08:00', cycle_type: 'mês_vigente', due_day: 5 
   });
   const [newSchedule, setNewSchedule] = useState({ studentid: '', date: new Date().toISOString().split('T')[0], time: '08:00', unit: UNIDADES[0] });
   const [rescheduleData, setRescheduleData] = useState({ date: '', time: '' });
@@ -99,6 +99,7 @@ export default function App() {
         modality: student.modality || 'Presencial',
         unit: student.unit || UNIDADES[0],
         packtotal: student.packtotal ?? 4,
+        monthly_fee: student.monthly_fee ?? 0,
         fixed_days: student.fixed_days ? student.fixed_days.split(',') : [],
         fixed_time: student.fixed_time || '08:00',
         cycle_type: student.cycle_type || 'mês_vigente',
@@ -108,7 +109,7 @@ export default function App() {
       setEditingStudentId(null);
       setNewStudent({ 
         name: '', whatsapp: '', email: '', birthdate: '', gender: 'Feminino', modality: 'Presencial',
-        unit: UNIDADES[0], packtotal: 4, fixed_days: [], fixed_time: '08:00', cycle_type: 'mês_vigente', due_day: 5 
+        unit: UNIDADES[0], packtotal: 4, monthly_fee: 0, fixed_days: [], fixed_time: '08:00', cycle_type: 'mês_vigente', due_day: 5 
       });
     }
     setShowStudentModal(true);
@@ -126,6 +127,7 @@ export default function App() {
     e.preventDefault();
     const payload = {
       ...newStudent,
+      monthly_fee: Number(newStudent.monthly_fee),
       fixed_days: newStudent.fixed_days.join(',')
     };
 
@@ -139,6 +141,12 @@ export default function App() {
     }
     fetchStudents();
     setShowStudentModal(false);
+  };
+
+  const handleUpdateStudentFee = async (studentId, newFee) => {
+    const { error } = await supabase.from('students').update({ monthly_fee: Number(newFee) }).eq('id', studentId);
+    if (error) alert('Erro ao atualizar valor: ' + error.message);
+    else fetchStudents();
   };
 
   const handleToggleActive = async (student) => {
@@ -422,9 +430,9 @@ export default function App() {
                           )}
                         </div>
                         <p className="text-xs text-slate-500 mt-1">{st.unit} • {st.whatsapp}</p>
-                        <p className="text-xs text-slate-400">{st.email}</p>
+                        <p className="text-xs font-bold text-emerald-600 mt-0.5">Mensalidade: R$ {st.monthly_fee || 0}</p>
                         {st.fixed_days && (
-                          <p className="text-[11px] text-indigo-600 font-medium mt-1">
+                          <p className="text-[11px] text-indigo-600 font-medium mt-0.5">
                             Grade Fixa: {st.fixed_days} {st.fixed_time ? `às ${st.fixed_time}` : ''}
                           </p>
                         )}
@@ -473,7 +481,7 @@ export default function App() {
           </div>
         )}
 
-        {/* --- ABA PAINEL FINANCEIRO --- */}
+        {/* --- ABA PAINEL FINANCEIRO (EDITÁVEL) --- */}
         {activeTab === 'financeiro' && (
           <div className="space-y-4">
             <h2 className="text-xl font-bold text-slate-800">Painel Financeiro</h2>
@@ -482,17 +490,42 @@ export default function App() {
               <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
                 <span className="text-xs text-slate-500 font-semibold block mb-1">Previsto no Mês</span>
                 <span className="text-xl font-bold text-slate-900">
-                  R$ {students.filter(st => st.active ?? true).reduce((acc, st) => acc + (PACK_OPTIONS.find(p => p.value === st.packtotal)?.price || 0), 0)}
+                  R$ {students.filter(st => st.active ?? true).reduce((acc, st) => acc + Number(st.monthly_fee || 0), 0)}
                 </span>
               </div>
               <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
                 <span className="text-xs text-slate-500 font-semibold block mb-1">Recebido via Pix</span>
                 <span className="text-xl font-bold text-emerald-600">
-                  R$ {students.filter(st => (st.active ?? true) && !st.paymentpending).reduce((acc, st) => acc + (PACK_OPTIONS.find(p => p.value === st.packtotal)?.price || 0), 0)}
+                  R$ {students.filter(st => (st.active ?? true) && !st.paymentpending).reduce((acc, st) => acc + Number(st.monthly_fee || 0), 0)}
                 </span>
               </div>
             </div>
 
+            {/* Ajuste de mensalidade por aluno */}
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+              <h3 className="text-sm font-bold text-slate-800">Ajuste de Valores dos Alunos (Mês Vigente)</h3>
+              <div className="space-y-2">
+                {students.filter(st => st.active ?? true).map(st => (
+                  <div key={st.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-200">
+                    <div>
+                      <p className="text-xs font-bold text-slate-800">{st.name}</p>
+                      <p className="text-[10px] text-slate-400">Vencimento: Dia {st.due_day || 5}</p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs font-bold text-slate-600">R$</span>
+                      <input 
+                        type="number" 
+                        defaultValue={st.monthly_fee || 0}
+                        onBlur={(e) => handleUpdateStudentFee(st.id, e.target.value)}
+                        className="w-20 p-1 border rounded-lg text-xs font-bold text-right bg-white"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Configuração do Pix */}
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
               <h3 className="text-sm font-bold text-slate-800">Sua Chave Pix para Cobrança</h3>
               <form onSubmit={handleSavePix} className="flex gap-2">
@@ -566,17 +599,23 @@ export default function App() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Pacote Contratado</label>
+                  <select value={newStudent.packtotal} onChange={e => setNewStudent({...newStudent, packtotal: Number(e.target.value)})} className="w-full p-2.5 border rounded-xl text-sm">
+                    {PACK_OPTIONS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Valor Mensal (R$)</label>
+                  <input required type="number" step="0.01" placeholder="Ex: 500" value={newStudent.monthly_fee} onChange={e => setNewStudent({...newStudent, monthly_fee: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm font-bold text-emerald-700" />
+                </div>
+              </div>
+
               <div>
                 <label className="text-xs font-bold text-slate-700 block mb-1">Unidade Principal</label>
                 <select value={newStudent.unit} onChange={e => setNewStudent({...newStudent, unit: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm">
                   {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Pacote Contratado</label>
-                <select value={newStudent.packtotal} onChange={e => setNewStudent({...newStudent, packtotal: Number(e.target.value)})} className="w-full p-2.5 border rounded-xl text-sm">
-                  {PACK_OPTIONS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
                 </select>
               </div>
 
