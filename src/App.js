@@ -51,8 +51,8 @@ export default function App() {
 
   // --- ESTADOS DE PESQUISA & FILTROS DE ALUNOS ---
   const [searchStudentTab, setSearchStudentTab] = useState('');
-  const [filterStatusTab, setFilterStatusTab] = useState('Todos'); // 'Todos', 'Ativos', 'Inativos'
-  const [filterModalityTab, setFilterModalityTab] = useState('Todas'); // 'Todas', 'Presencial', 'Híbrido', 'Consultoria'
+  const [filterStatusTab, setFilterStatusTab] = useState('Todos');
+  const [filterModalityTab, setFilterModalityTab] = useState('Todas');
 
   // --- FINANCEIRO ---
   const [financePeriod, setFinancePeriod] = useState('mensal');
@@ -96,7 +96,6 @@ export default function App() {
     requestNotificationPermission();
   }, []);
 
-  // AUTO PUSH LOCAL
   useEffect(() => {
     if (schedules.length === 0) return;
 
@@ -175,7 +174,6 @@ export default function App() {
     }
   };
 
-  // --- GESTÃO DE UNIDADES ---
   const handleAddUnit = async (e) => {
     e.preventDefault();
     if (!newUnitName.trim()) return;
@@ -204,7 +202,6 @@ export default function App() {
 
   const activeUnitsList = units.filter(u => u.active).map(u => u.name);
 
-  // --- REGISTRAR PAGAMENTO MULTI-MEIOS ---
   const handleOpenPaymentModal = (student) => {
     setSelectedStudentForPayment(student);
     setPaymentForm({
@@ -248,7 +245,6 @@ export default function App() {
     }
   };
 
-  // --- LIMPAR MÊS ---
   const handleClearMonthSchedules = async () => {
     const year = Number(batchYear);
     const monthStr = String(batchMonth).padStart(2, '0');
@@ -268,7 +264,6 @@ export default function App() {
     }
   };
 
-  // --- GERAÇÃO EM MASSA ---
   const handleGenerateBatchSchedules = async (e) => {
     e.preventDefault();
     const activeStudents = students.filter(s => (s.active ?? true) && s.modality !== 'Consultoria');
@@ -342,7 +337,6 @@ export default function App() {
     }
   };
 
-  // --- NAVEGAÇÃO DE DATAS NA AGENDA ---
   const navigateDate = (amount) => {
     const newDate = new Date(currentDate);
     if (calendarView === 'dia') {
@@ -355,7 +349,13 @@ export default function App() {
     setCurrentDate(newDate);
   };
 
-  const formatDateYYYYMMDD = (d) => d.toISOString().split('T')[0];
+  // FORMATADOR LOCAL YYYY-MM-DD
+  const formatDateYYYYMMDD = (d) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
   const matchesTurn = (timeStr, turn) => {
     if (turn === 'Todos' || !timeStr) return true;
@@ -374,28 +374,22 @@ export default function App() {
     return matchStudent && matchUnit && matchTurn;
   });
 
-  // FILTRAGEM COMPLETA DA ABA ALUNOS
   const filteredStudentsTab = students.filter(st => {
     const isActive = st.active ?? true;
-    
-    // Filtro por Texto (Nome ou Telefone)
     const matchText = !searchStudentTab.trim() || 
       st.name.toLowerCase().includes(searchStudentTab.toLowerCase()) || 
       (st.whatsapp && st.whatsapp.includes(searchStudentTab));
 
-    // Filtro por Status (Ativos / Inativos)
     const matchStatus = filterStatusTab === 'Todos' || 
       (filterStatusTab === 'Ativos' && isActive) || 
       (filterStatusTab === 'Inativos' && !isActive);
 
-    // Filtro por Modalidade
     const matchModality = filterModalityTab === 'Todas' || 
       (st.modality || 'Presencial') === filterModalityTab;
 
     return matchText && matchStatus && matchModality;
   });
 
-  // --- GESTÃO DE ALUNOS ---
   const handleOpenStudentModal = (student = null) => {
     const defaultUnit = activeUnitsList[0] || 'Atendimento Domiciliar';
     if (student) {
@@ -426,14 +420,14 @@ export default function App() {
         fixed_schedule: parsedSchedule,
         cycle_type: student.cycle_type || 'mês_vigente',
         due_day: student.due_day || 5,
-        start_date: student.start_date || new Date().toISOString().split('T')[0]
+        start_date: student.start_date || formatDateYYYYMMDD(new Date())
       });
     } else {
       setEditingStudentId(null);
       setNewStudent({ 
         name: '', whatsapp: '', email: '', birthdate: '', gender: 'Feminino', modality: 'Presencial',
         unit: defaultUnit, packtotal: 4, monthly_fee: 0, fixed_schedule: {}, cycle_type: 'mês_vigente', due_day: 5,
-        start_date: new Date().toISOString().split('T')[0]
+        start_date: formatDateYYYYMMDD(new Date())
       });
     }
     setShowStudentModal(true);
@@ -510,7 +504,6 @@ export default function App() {
     }
   };
 
-  // --- GESTÃO DE AGENDAMENTOS ---
   const handleAddSchedule = async (e) => {
     e.preventDefault();
     const student = students.find(s => s.id === newSchedule.studentid);
@@ -616,15 +609,17 @@ export default function App() {
     return diffMinutes > 15;
   };
 
-  // --- CÁLCULOS DA SEMANA EM COLUNAS ---
+  // --- CORREÇÃO DA MATRIZ DA SEMANA (DOMINGO A SÁBADO SEM OFFSET) ---
   const getWeekDaysArray = (date) => {
-    const startWeek = new Date(date);
-    startWeek.setDate(date.getDate() - date.getDay());
+    const tempDate = new Date(date);
+    const dayOfWeek = tempDate.getDay();
+    const sundayDate = new Date(tempDate);
+    sundayDate.setDate(tempDate.getDate() - dayOfWeek);
     
     const days = [];
     for (let i = 0; i < 7; i++) {
-      const d = new Date(startWeek);
-      d.setDate(startWeek.getDate() + i);
+      const d = new Date(sundayDate);
+      d.setDate(sundayDate.getDate() + i);
       const dateStr = formatDateYYYYMMDD(d);
       days.push({
         dateObj: d,
@@ -889,14 +884,14 @@ export default function App() {
               </div>
             )}
 
-            {/* --- EXIBIÇÃO: VISÃO SEMANA POR COLUNAS (A-Z / HORÁRIO) --- */}
+            {/* --- EXIBIÇÃO: VISÃO SEMANA CORRIGIDA (SEM SHIFT DE UTC) --- */}
             {calendarView === 'semana' && (
               <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
                 <div className="grid grid-cols-7 gap-1.5 min-w-[650px]">
                   {getWeekDaysArray(currentDate).map((wDay) => {
                     const daySchedules = filteredSchedules
                       .filter(s => s.date === wDay.dateStr)
-                      .sort((a, b) => a.time.localeCompare(b.time)); // Ordenado por horário
+                      .sort((a, b) => a.time.localeCompare(b.time));
 
                     const isToday = wDay.dateStr === formatDateYYYYMMDD(new Date());
 
@@ -905,13 +900,13 @@ export default function App() {
                         key={wDay.dateStr} 
                         className={`border rounded-xl p-1.5 min-h-[300px] flex flex-col justify-start space-y-1.5 ${isToday ? 'border-indigo-600 bg-indigo-50/20' : 'border-slate-200 bg-slate-50/50'}`}
                       >
-                        {/* CABEÇALHO DO DIA NA COLUNA */}
+                        {/* CABEÇALHO DO DIA */}
                         <div className={`text-center py-1 rounded-lg ${isToday ? 'bg-indigo-600 text-white font-bold' : 'bg-slate-200 text-slate-700 font-semibold'}`}>
                           <span className="text-[10px] uppercase block">{wDay.dayLabel}</span>
                           <span className="text-xs font-extrabold">{wDay.dayNumber}</span>
                         </div>
 
-                        {/* LISTA DE ALUNOS DO DIA EM ORDEM DE HORÁRIO */}
+                        {/* LISTA DE AULAS */}
                         <div className="space-y-1.5 overflow-y-auto">
                           {daySchedules.map(sc => (
                             <div 
@@ -989,7 +984,6 @@ export default function App() {
             <div className="flex justify-between items-center">
               <div>
                 <h2 className="text-xl font-bold text-slate-800">Alunos & Vouchers</h2>
-                {/* CONTADOR DE ALUNOS CADASTRADOS X ATIVOS */}
                 <p className="text-xs font-semibold text-slate-500 mt-0.5">
                   <span className="text-indigo-600 font-bold">{students.length}</span> Cadastrados • <span className="text-emerald-600 font-bold">{students.filter(s => s.active ?? true).length}</span> Ativos
                 </p>
@@ -1004,7 +998,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* PAINEL COMPLETO DE BUSCA E FILTROS DE ALUNOS */}
             <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm space-y-2.5">
               <input 
                 type="text" 
@@ -1042,7 +1035,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* LISTAGEM DE ALUNOS FILTRADA E ORDENADA A-Z */}
             <div className="space-y-3">
               {filteredStudentsTab.map(st => {
                 const isActive = st.active ?? true;
@@ -1120,7 +1112,6 @@ export default function App() {
               </span>
             </div>
 
-            {/* SELETOR DE PERÍODO */}
             <div className="bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm flex justify-between gap-1">
               {[
                 { id: 'mensal', label: 'Mensal' },
@@ -1138,7 +1129,6 @@ export default function App() {
               ))}
             </div>
 
-            {/* CARDS DE NÚMEROS ABSOLUTOS */}
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
                 <span className="text-[11px] text-slate-400 font-bold uppercase block mb-1">Faturamento Real ({financePeriod.toUpperCase()})</span>
@@ -1169,7 +1159,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* DETALHAMENTO DE MEIOS DE PAGAMENTO REGISTRADOS */}
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
               <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Histórico de Recebimentos por Forma de Pagamento</h3>
               <div className="grid grid-cols-2 gap-2">
@@ -1182,7 +1171,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* GRÁFICO DE PIZZA / RECEITA POR MODALIDADE */}
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
               <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Divisão de Receita por Modalidade</h3>
               
@@ -1222,7 +1210,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* GESTÃO DE MENSALIDADES INDIVIDUAIS */}
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
               <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Ajuste de Valores dos Alunos</h3>
               <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
@@ -1246,7 +1233,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* CHAVE PIX */}
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
               <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Chave Pix para Cobrança</h3>
               <form onSubmit={handleSavePix} className="flex gap-2">
@@ -1493,7 +1479,6 @@ export default function App() {
                 )}
               </div>
 
-              {/* SELEÇÃO DE DIAS E HORÁRIOS FLEXÍVEIS */}
               {newStudent.modality !== 'Consultoria' && (
                 <div className="space-y-2 border-t pt-2">
                   <label className="text-xs font-bold text-slate-700 block">Grade Fixa (Selecione o Dia e o Horário)</label>
