@@ -15,17 +15,17 @@ const PACK_OPTIONS = [
 ];
 
 const DIAS_SEMANA = [
-  { id: '0', label: 'Dom' },
   { id: '1', label: 'Seg' },
   { id: '2', label: 'Ter' },
   { id: '3', label: 'Qua' },
   { id: '4', label: 'Qui' },
   { id: '5', label: 'Sex' },
   { id: '6', label: 'Sáb' },
+  { id: '0', label: 'Dom' },
 ];
 
 const MAPA_DIAS_SEMANA = {
-  'Dom': 0, 'Seg': 1, 'Ter': 2, 'Qua': 3, 'Qui': 4, 'Sex': 5, 'Sáb': 6
+  'Seg': 1, 'Ter': 2, 'Qua': 3, 'Qui': 4, 'Sex': 5, 'Sáb': 6, 'Dom': 0
 };
 
 const MODALIDADES = ['Consultoria', 'Híbrido', 'Presencial'];
@@ -35,7 +35,7 @@ const FORMAS_PAGAMENTO = ['Pix', 'Dinheiro', 'Cartão de Crédito', 'Cartão de 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
-  const [activeTab, setActiveTab] = useState('resumo'); // RESUMO COMO ABA INICIAL
+  const [activeTab, setActiveTab] = useState('resumo');
   const [students, setStudents] = useState([]);
   const [schedules, setSchedules] = useState([]);
   const [units, setUnits] = useState([]);
@@ -667,16 +667,19 @@ export default function App() {
     return diffMinutes > 15;
   };
 
+  // --- OBTÉM OS DIAS DA SEMANA (SEGUNDA A DOMINGO) ---
   const getWeekDaysArray = (date) => {
     const tempDate = new Date(date);
-    const dayOfWeek = tempDate.getDay();
-    const sundayDate = new Date(tempDate);
-    sundayDate.setDate(tempDate.getDate() - dayOfWeek);
+    const dayOfWeek = tempDate.getDay(); // 0 (Dom) a 6 (Sáb)
+    const distanceToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    
+    const mondayDate = new Date(tempDate);
+    mondayDate.setDate(tempDate.getDate() + distanceToMonday);
     
     const days = [];
     for (let i = 0; i < 7; i++) {
-      const d = new Date(sundayDate);
-      d.setDate(sundayDate.getDate() + i);
+      const d = new Date(mondayDate);
+      d.setDate(mondayDate.getDate() + i);
       const dateStr = formatDateYYYYMMDD(d);
       days.push({
         dateObj: d,
@@ -694,10 +697,10 @@ export default function App() {
   const todayStr = formatDateYYYYMMDD(new Date());
   const todaySchedules = schedules.filter(s => s.date === todayStr).sort((a, b) => a.time.localeCompare(b.time));
 
-  // Aulas da Semana Atual
-  const weekDays = getWeekDaysArray(new Date());
-  const weekStartStr = weekDays[0].dateStr;
-  const weekEndStr = weekDays[6].dateStr;
+  // Aulas da Semana Atual (Segunda a Domingo)
+  const currentWeekDays = getWeekDaysArray(new Date());
+  const weekStartStr = currentWeekDays[0].dateStr;
+  const weekEndStr = currentWeekDays[6].dateStr;
   const weekSchedulesDone = schedules.filter(s => s.date >= weekStartStr && s.date <= weekEndStr && s.status === 'completed');
 
   // Aniversariantes do Mês
@@ -807,7 +810,7 @@ export default function App() {
 
       <main className="p-4 max-w-5xl mx-auto space-y-5 relative z-10">
 
-        {/* --- ABA 1: RESUMO / DASHBOARD ESTILO DARK BLUE --- */}
+        {/* --- ABA 1: RESUMO / DASHBOARD --- */}
         {activeTab === 'resumo' && (
           <div className="space-y-5">
             <div className="flex justify-between items-center">
@@ -1786,7 +1789,7 @@ export default function App() {
                               }
                               setNewStudent({ ...newStudent, fixed_schedule: newSched });
                             }}
-                            className={`px-3 py-1 text-xs font-bold rounded-xl border min-w-[50px] transition ${isSelected ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-900 text-slate-400 border-slate-800'}`}
+                            className={`px-3 py-1 text-xs font-bold rounded-xl border transition ${isSelected ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-900 text-slate-400 border-slate-800'}`}
                           >
                             {d.label}
                           </button>
