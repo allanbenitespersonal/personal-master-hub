@@ -30,6 +30,7 @@ const MAPA_DIAS_SEMANA = {
 
 const MODALIDADES = ['Consultoria', 'Híbrido', 'Presencial'];
 const SEXO_OPTIONS = ['Masculino', 'Feminino', 'Outro', 'Não informado'];
+const FORMAS_PAGAMENTO = ['Pix', 'Dinheiro', 'Cartão de Crédito', 'Cartão de Débito', 'Misto / Dividido'];
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -38,9 +39,10 @@ export default function App() {
   const [students, setStudents] = useState([]);
   const [schedules, setSchedules] = useState([]);
   const [units, setUnits] = useState([]);
+  const [transactions, setTransactions] = useState([]);
   const [pixKey, setPixKey] = useState(localStorage.getItem('pix_key') || '');
   
-  // --- ESTADOS DA AGENDA (VISÕES E FILTROS) ---
+  // --- ESTADOS DA AGENDA ---
   const [calendarView, setCalendarView] = useState('mes');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [searchStudent, setSearchStudent] = useState('');
@@ -49,7 +51,7 @@ export default function App() {
 
   // --- ESTADOS DE PESQUISA & FINANCEIRO ---
   const [searchStudentTab, setSearchStudentTab] = useState('');
-  const [financePeriod, setFinancePeriod] = useState('mensal'); // 'mensal', 'trimestral', 'semestral', 'anual'
+  const [financePeriod, setFinancePeriod] = useState('mensal');
 
   // Modais
   const [showStudentModal, setShowStudentModal] = useState(false);
@@ -58,6 +60,8 @@ export default function App() {
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [showUnitsModal, setShowUnitsModal] = useState(false);
   const [showBatchModal, setShowBatchModal] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selectedStudentForPayment, setSelectedStudentForPayment] = useState(null);
   const [selectedSchedule, setSelectedSchedule] = useState(null);
 
   // Formulários
@@ -65,9 +69,16 @@ export default function App() {
   const [batchYear, setBatchYear] = useState(new Date().getFullYear());
   const [batchMonth, setBatchMonth] = useState(new Date().getMonth() + 1);
   
+  const [paymentForm, setPaymentForm] = useState({
+    method: 'Pix',
+    details: '',
+    amount: 0
+  });
+
   const [newStudent, setNewStudent] = useState({ 
     name: '', whatsapp: '', email: '', birthdate: '', gender: 'Feminino', modality: 'Presencial',
-    unit: '', packtotal: 4, monthly_fee: 0, fixed_schedule: {}, cycle_type: 'mês_vigente', due_day: 5 
+    unit: '', packtotal: 4, monthly_fee: 0, fixed_schedule: {}, cycle_type: 'mês_vigente', due_day: 5,
+    start_date: new Date().toISOString().split('T')[0]
   });
 
   const [newSchedule, setNewSchedule] = useState({ studentid: '', date: new Date().toISOString().split('T')[0], time: '08:00', unit: '' });
@@ -77,6 +88,7 @@ export default function App() {
     fetchStudents();
     fetchSchedules();
     fetchUnits();
+    fetchTransactions();
   }, []);
 
   const fetchUnits = async () => {
@@ -105,6 +117,12 @@ export default function App() {
     const { data, error } = await supabase.from('schedules').select('*');
     if (error) console.error(error);
     if (data) setSchedules(data);
+  };
+
+  const fetchTransactions = async () => {
+    const { data, error } = await supabase.from('transactions').select('*');
+    if (error) console.error(error);
+    if (data) setTransactions(data);
   };
 
   const handleLogin = (e) => {
@@ -144,6 +162,50 @@ export default function App() {
   };
 
   const activeUnitsList = units.filter(u => u.active).map(u => u.name);
+
+  // --- REGISTRAR PAGAMENTO MULTI-MEIOS ---
+  const handleOpenPaymentModal = (student) => {
+    setSelectedStudentForPayment(student);
+    setPaymentForm({
+      method: 'Pix',
+      details: '',
+      amount: student.monthly_fee || 0
+    });
+    setShowPaymentModal(true);
+  };
+
+  const handleSavePayment = async (e) => {
+    e.preventDefault();
+    if (!selectedStudentForPayment) return;
+
+    const currentRefMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+
+    const transactionObj = {
+      id: Date.now().toString(),
+      student_id: selectedStudentForPayment.id,
+      student_name: selectedStudentForPayment.name,
+      amount: Number(paymentForm.amount),
+      payment_method: paymentForm.method,
+      payment_details: paymentForm.method === 'Misto / Dividido' ? paymentForm.details : paymentForm.method,
+      reference_month: currentRefMonth
+    };
+
+    const { error: txError } = await supabase.from('transactions').insert([transactionObj]);
+    if (txError) {
+      alert('Erro ao registrar transação: ' + txError.message);
+      return;
+    }
+
+    const { error: stError } = await supabase.from('students').update({ paymentpending: false }).eq('id', selectedStudentForPayment.id);
+    if (stError) {
+      alert('Erro ao atualizar status do aluno: ' + stError.message);
+    } else {
+      alert('Pagamento registrado com sucesso!');
+      fetchStudents();
+      fetchTransactions();
+      setShowPaymentModal(false);
+    }
+  };
 
   // --- LIMPAR MÊS ---
   const handleClearMonthSchedules = async () => {
@@ -307,13 +369,15 @@ export default function App() {
         monthly_fee: student.monthly_fee ?? 0,
         fixed_schedule: parsedSchedule,
         cycle_type: student.cycle_type || 'mês_vigente',
-        due_day: student.due_day || 5
+        due_day: student.due_day || 5,
+        start_date: student.start_date || new Date().toISOString().split('T')[0]
       });
     } else {
       setEditingStudentId(null);
       setNewStudent({ 
         name: '', whatsapp: '', email: '', birthdate: '', gender: 'Feminino', modality: 'Presencial',
-        unit: defaultUnit, packtotal: 4, monthly_fee: 0, fixed_schedule: {}, cycle_type: 'mês_vigente', due_day: 5 
+        unit: defaultUnit, packtotal: 4, monthly_fee: 0, fixed_schedule: {}, cycle_type: 'mês_vigente', due_day: 5,
+        start_date: new Date().toISOString().split('T')[0]
       });
     }
     setShowStudentModal(true);
@@ -372,11 +436,14 @@ export default function App() {
     else fetchStudents();
   };
 
-  const handleTogglePayment = async (student) => {
-    const newPayment = !student.paymentpending;
-    const { error } = await supabase.from('students').update({ paymentpending: newPayment }).eq('id', student.id);
-    if (error) alert('Erro ao atualizar pagamento: ' + error.message);
-    else fetchStudents();
+  const handleTogglePaymentStatusDirect = async (student) => {
+    if (student.paymentpending) {
+      handleOpenPaymentModal(student);
+    } else {
+      const { error } = await supabase.from('students').update({ paymentpending: true }).eq('id', student.id);
+      if (error) alert('Erro ao atualizar status: ' + error.message);
+      else fetchStudents();
+    }
   };
 
   const handleDeleteStudent = async (id) => {
@@ -493,28 +560,62 @@ export default function App() {
     return diffMinutes > 15;
   };
 
-  // --- CÁLCULOS DO FINANCEIRO INTELIGENTE ---
+  // --- CÁLCULOS FINANCEIROS CONSIDERANDO DATA DE INGRESSO ---
   const activeStudents = students.filter(st => st.active ?? true);
-  
-  // Multiplicador de período
-  const periodMultiplier = financePeriod === 'mensal' ? 1 : financePeriod === 'trimestral' ? 3 : financePeriod === 'semestral' ? 6 : 12;
+  const now = new Date();
 
-  const totalMonthlyGross = activeStudents.reduce((acc, st) => acc + Number(st.monthly_fee || 0), 0);
-  const totalPeriodGross = totalMonthlyGross * periodMultiplier;
+  // Helper para meses de contrato no período
+  const getActiveMonthsInPeriod = (startDateStr, periodMonths) => {
+    const startDate = startDateStr ? new Date(`${startDateStr}T00:00:00`) : new Date(2020, 0, 1);
+    let monthsToCount = 0;
 
-  const totalPaidMonthly = activeStudents.filter(st => !st.paymentpending).reduce((acc, st) => acc + Number(st.monthly_fee || 0), 0);
-  const totalPaidPeriod = totalPaidMonthly * periodMultiplier;
+    for (let i = 0; i < periodMonths; i++) {
+      const targetMonthDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      if (startDate <= new Date(targetMonthDate.getFullYear(), targetMonthDate.getMonth() + 1, 0)) {
+        monthsToCount++;
+      }
+    }
+    return monthsToCount;
+  };
 
-  const totalPendingMonthly = activeStudents.filter(st => st.paymentpending).reduce((acc, st) => acc + Number(st.monthly_fee || 0), 0);
-  const totalPendingPeriod = totalPendingMonthly * periodMultiplier;
+  const periodMonths = financePeriod === 'mensal' ? 1 : financePeriod === 'trimestral' ? 3 : financePeriod === 'semestral' ? 6 : 12;
+
+  const totalPeriodGross = activeStudents.reduce((acc, st) => {
+    const activeMonths = getActiveMonthsInPeriod(st.start_date, periodMonths);
+    return acc + (Number(st.monthly_fee || 0) * activeMonths);
+  }, 0);
+
+  const totalPaidPeriod = activeStudents.reduce((acc, st) => {
+    if (st.paymentpending) return acc;
+    const activeMonths = getActiveMonthsInPeriod(st.start_date, periodMonths);
+    return acc + (Number(st.monthly_fee || 0) * activeMonths);
+  }, 0);
+
+  const totalPendingPeriod = activeStudents.reduce((acc, st) => {
+    if (!st.paymentpending) return acc;
+    const activeMonths = getActiveMonthsInPeriod(st.start_date, periodMonths);
+    return acc + (Number(st.monthly_fee || 0) * activeMonths);
+  }, 0);
 
   const defaultRate = totalPeriodGross > 0 ? ((totalPendingPeriod / totalPeriodGross) * 100).toFixed(1) : 0;
-  const avgTicket = activeStudents.length > 0 ? (totalMonthlyGross / activeStudents.length).toFixed(0) : 0;
+  const avgTicket = activeStudents.length > 0 ? (activeStudents.reduce((acc, st) => acc + Number(st.monthly_fee || 0), 0) / activeStudents.length).toFixed(0) : 0;
+
+  // Totais por Método de Pagamento (das Transações)
+  const paymentMethodTotals = FORMAS_PAGAMENTO.reduce((acc, method) => {
+    const sum = transactions
+      .filter(t => t.payment_method === method)
+      .reduce((tAcc, t) => tAcc + Number(t.amount || 0), 0);
+    acc[method] = sum;
+    return acc;
+  }, {});
 
   // Distribuição por Modalidade
   const modalityStats = MODALIDADES.map(m => {
     const mStudents = activeStudents.filter(st => (st.modality || 'Presencial') === m);
-    const mRevenue = mStudents.reduce((acc, st) => acc + Number(st.monthly_fee || 0), 0) * periodMultiplier;
+    const mRevenue = mStudents.reduce((acc, st) => {
+      const activeMonths = getActiveMonthsInPeriod(st.start_date, periodMonths);
+      return acc + (Number(st.monthly_fee || 0) * activeMonths);
+    }, 0);
     const percent = totalPeriodGross > 0 ? Math.round((mRevenue / totalPeriodGross) * 100) : 0;
     return { name: m, count: mStudents.length, revenue: mRevenue, percent };
   });
@@ -813,10 +914,11 @@ export default function App() {
                         </div>
                         <p className="text-xs text-slate-500 mt-1">{st.unit} • {st.whatsapp}</p>
                         <p className="text-xs font-bold text-emerald-600 mt-0.5">Mensalidade: R$ {st.monthly_fee || 0}</p>
+                        <p className="text-[10px] text-slate-400 font-medium">Início Contrato: {st.start_date ? new Date(`${st.start_date}T00:00:00`).toLocaleDateString('pt-BR') : 'Não informado'}</p>
                       </div>
                       <button 
-                        onClick={() => handleTogglePayment(st)}
-                        className={`text-xs font-bold px-2.5 py-1 rounded-full ${st.paymentpending ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}
+                        onClick={() => handleTogglePaymentStatusDirect(st)}
+                        className={`text-xs font-bold px-2.5 py-1 rounded-full border ${st.paymentpending ? 'bg-rose-100 text-rose-700 border-rose-300' : 'bg-emerald-100 text-emerald-700 border-emerald-300'}`}
                       >
                         {st.paymentpending ? 'Inadimplente' : 'Em dia'}
                       </button>
@@ -854,9 +956,6 @@ export default function App() {
                   </div>
                 );
               })}
-              {filteredStudentsTab.length === 0 && (
-                <p className="text-center text-slate-400 py-8 text-sm">Nenhum aluno encontrado.</p>
-              )}
             </div>
           </div>
         )}
@@ -892,18 +991,16 @@ export default function App() {
             {/* CARDS DE NÚMEROS ABSOLUTOS */}
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                <span className="text-[11px] text-slate-400 font-bold uppercase block mb-1">Faturamento Previsto</span>
+                <span className="text-[11px] text-slate-400 font-bold uppercase block mb-1">Faturamento Real ({financePeriod.toUpperCase()})</span>
                 <span className="text-xl font-extrabold text-slate-900">R$ {totalPeriodGross.toLocaleString('pt-BR')}</span>
-                <span className="text-[10px] text-slate-400 block mt-1">
-                  {financePeriod === 'mensal' ? 'Projeção Mês Vigente' : `Total acumulado ${periodMultiplier} meses`}
-                </span>
+                <span className="text-[10px] text-slate-400 block mt-1">Calculado pelo tempo de contrato</span>
               </div>
 
               <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                <span className="text-[11px] text-emerald-600 font-bold uppercase block mb-1">Recebido via Pix</span>
+                <span className="text-[11px] text-emerald-600 font-bold uppercase block mb-1">Recebido Quitado</span>
                 <span className="text-xl font-extrabold text-emerald-600">R$ {totalPaidPeriod.toLocaleString('pt-BR')}</span>
                 <span className="text-[10px] text-emerald-700/70 block mt-1">
-                  {((totalPaidPeriod / (totalPeriodGross || 1)) * 100).toFixed(0)}% quitado
+                  {((totalPaidPeriod / (totalPeriodGross || 1)) * 100).toFixed(0)}% do previsto
                 </span>
               </div>
 
@@ -911,7 +1008,7 @@ export default function App() {
                 <span className="text-[11px] text-rose-500 font-bold uppercase block mb-1">Pendente / Inadimplência</span>
                 <span className="text-xl font-extrabold text-rose-600">R$ {totalPendingPeriod.toLocaleString('pt-BR')}</span>
                 <span className="text-[10px] text-rose-500 font-semibold block mt-1">
-                  Taxa de Inadimplência: {defaultRate}%
+                  Taxa: {defaultRate}%
                 </span>
               </div>
 
@@ -922,30 +1019,16 @@ export default function App() {
               </div>
             </div>
 
-            {/* GRÁFICO EM BLOCO / BARRA DE RETENÇÃO FINANCEIRA */}
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-2">
-              <div className="flex justify-between items-center text-xs font-bold">
-                <span className="text-slate-800">Balanço do Período ({financePeriod.toUpperCase()})</span>
-                <span className="text-emerald-600">{((totalPaidPeriod / (totalPeriodGross || 1)) * 100).toFixed(0)}% Recebido</span>
-              </div>
-              
-              {/* Barra do gráfico em blocos */}
-              <div className="h-4 w-full bg-slate-100 rounded-full overflow-hidden flex">
-                <div 
-                  className="bg-emerald-500 transition-all duration-500 h-full"
-                  style={{ width: `${(totalPaidPeriod / (totalPeriodGross || 1)) * 100}%` }}
-                  title="Recebido"
-                ></div>
-                <div 
-                  className="bg-rose-500 transition-all duration-500 h-full"
-                  style={{ width: `${(totalPendingPeriod / (totalPeriodGross || 1)) * 100}%` }}
-                  title="Pendente"
-                ></div>
-              </div>
-
-              <div className="flex justify-between text-[11px] font-semibold text-slate-500 pt-1">
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Recebido (R$ {totalPaidPeriod})</span>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Pendente (R$ {totalPendingPeriod})</span>
+            {/* DETALHAMENTO DE MEIOS DE PAGAMENTO REGISTRADOS */}
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Histórico de Recebimentos por Forma de Pagamento</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {FORMAS_PAGAMENTO.map(method => (
+                  <div key={method} className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                    <span className="text-[10px] font-bold text-slate-400 block">{method}</span>
+                    <span className="text-sm font-bold text-slate-900">R$ {(paymentMethodTotals[method] || 0).toLocaleString('pt-BR')}</span>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -954,7 +1037,6 @@ export default function App() {
               <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Divisão de Receita por Modalidade</h3>
               
               <div className="flex items-center justify-around py-2">
-                {/* Visual Pizza CSS */}
                 <div 
                   className="w-24 h-24 rounded-full border-2 border-white shadow-inner flex items-center justify-center relative"
                   style={{
@@ -966,11 +1048,10 @@ export default function App() {
                   }}
                 >
                   <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center font-bold text-[10px] text-slate-700">
-                    {periodMultiplier}M
+                    {periodMonths}M
                   </div>
                 </div>
 
-                {/* Legenda com Números Absolutos */}
                 <div className="space-y-1.5 text-xs">
                   <div className="flex items-center gap-2">
                     <span className="w-3 h-3 rounded-full bg-indigo-600"></span>
@@ -1035,6 +1116,60 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* --- MODAL DAR BAIXA EM PAGAMENTO --- */}
+      {showPaymentModal && selectedStudentForPayment && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-5 w-full max-w-sm space-y-4">
+            <h3 className="text-lg font-bold text-slate-900">Dar Baixa em Mensalidade</h3>
+            <p className="text-xs text-slate-500">Registrar pagamento de <strong>{selectedStudentForPayment.name}</strong></p>
+
+            <form onSubmit={handleSavePayment} className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Valor Pago (R$)</label>
+                <input 
+                  required 
+                  type="number" 
+                  step="0.01" 
+                  value={paymentForm.amount} 
+                  onChange={e => setPaymentForm({...paymentForm, amount: e.target.value})} 
+                  className="w-full p-2.5 border rounded-xl text-sm font-bold text-emerald-700" 
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Forma de Pagamento</label>
+                <select 
+                  value={paymentForm.method} 
+                  onChange={e => setPaymentForm({...paymentForm, method: e.target.value})} 
+                  className="w-full p-2.5 border rounded-xl text-sm font-bold"
+                >
+                  {FORMAS_PAGAMENTO.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+
+              {paymentForm.method === 'Misto / Dividido' && (
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Detalhamento da Divisão</label>
+                  <input 
+                    required 
+                    type="text" 
+                    placeholder="Ex: R$ 200 Pix + R$ 300 Cartão Crédito" 
+                    value={paymentForm.details} 
+                    onChange={e => setPaymentForm({...paymentForm, details: e.target.value})} 
+                    className="w-full p-2.5 border rounded-xl text-xs" 
+                  />
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <button type="button" onClick={() => setShowPaymentModal(false)} className="w-1/2 py-2.5 border rounded-xl text-sm font-bold text-slate-600">Cancelar</button>
+                <button type="submit" className="w-1/2 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold">Confirmar Baixa</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* --- MODAL GERAÇÃO EM MASSA DA GRADE --- */}
       {showBatchModal && (
@@ -1149,15 +1284,20 @@ export default function App() {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">Sexo</label>
-                  <select value={newStudent.gender} onChange={e => setNewStudent({...newStudent, gender: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm">
-                    {SEXO_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Data Início Contrato</label>
+                  <input required type="date" value={newStudent.start_date} onChange={e => setNewStudent({...newStudent, start_date: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm font-bold" />
                 </div>
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-1">Data de Nascimento</label>
                   <input required type="date" value={newStudent.birthdate} onChange={e => setNewStudent({...newStudent, birthdate: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" />
                 </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Sexo</label>
+                <select value={newStudent.gender} onChange={e => setNewStudent({...newStudent, gender: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm">
+                  {SEXO_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
               </div>
 
               <div>
