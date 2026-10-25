@@ -41,11 +41,11 @@ export default function App() {
   const [pixKey, setPixKey] = useState(localStorage.getItem('pix_key') || '');
   
   // --- ESTADOS DA AGENDA (VISÕES E FILTROS) ---
-  const [calendarView, setCalendarView] = useState('mes'); // 'dia', 'semana', 'mes'
+  const [calendarView, setCalendarView] = useState('mes');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [searchStudent, setSearchStudent] = useState('');
   const [filterUnit, setFilterUnit] = useState('Todas');
-  const [filterTurn, setFilterTurn] = useState('Todos'); // 'Todos', 'Manhã', 'Tarde', 'Noite'
+  const [filterTurn, setFilterTurn] = useState('Todos');
 
   // Modais
   const [showStudentModal, setShowStudentModal] = useState(false);
@@ -59,11 +59,14 @@ export default function App() {
   // Formulários
   const [newUnitName, setNewUnitName] = useState('');
   const [batchYear, setBatchYear] = useState(new Date().getFullYear());
-  const [batchMonth, setBatchMonth] = useState(new Date().getMonth() + 1); // 1 a 12
+  const [batchMonth, setBatchMonth] = useState(new Date().getMonth() + 1);
+  
+  // Estrutura de Aluno com suporte a mapa de dias/horários: { "Seg": "07:00", "Ter": "18:00" }
   const [newStudent, setNewStudent] = useState({ 
     name: '', whatsapp: '', email: '', birthdate: '', gender: 'Feminino', modality: 'Presencial',
-    unit: '', packtotal: 4, monthly_fee: 0, fixed_days: [], fixed_time: '08:00', cycle_type: 'mês_vigente', due_day: 5 
+    unit: '', packtotal: 4, monthly_fee: 0, fixed_schedule: {}, cycle_type: 'mês_vigente', due_day: 5 
   });
+
   const [newSchedule, setNewSchedule] = useState({ studentid: '', date: new Date().toISOString().split('T')[0], time: '08:00', unit: '' });
   const [rescheduleData, setRescheduleData] = useState({ date: '', time: '' });
 
@@ -136,7 +139,27 @@ export default function App() {
 
   const activeUnitsList = units.filter(u => u.active).map(u => u.name);
 
-  // --- GERAÇÃO EM MASSA DA GRADE ---
+  // --- LIMPAR MÊS QUE FOI GERADO ERRADO ---
+  const handleClearMonthSchedules = async () => {
+    const year = Number(batchYear);
+    const monthStr = String(batchMonth).padStart(2, '0');
+    const prefix = `${year}-${monthStr}`;
+
+    if (!window.confirm(`Tem certeza que deseja APAGAR TODOS os agendamentos do mês ${batchMonth}/${batchYear}?`)) {
+      return;
+    }
+
+    const { error } = await supabase.from('schedules').delete().like('date', `${prefix}%`);
+    if (error) {
+      alert('Erro ao limpar agendamentos: ' + error.message);
+    } else {
+      alert(`Agendamentos de ${batchMonth}/${batchYear} removidos com sucesso!`);
+      fetchSchedules();
+      setShowBatchModal(false);
+    }
+  };
+
+  // --- GERAÇÃO EM MASSA DA GRADE COM HORÁRIOS MÚLTIPLOS ---
   const handleGenerateBatchSchedules = async (e) => {
     e.preventDefault();
     const activeStudents = students.filter(s => (s.active ?? true) && s.modality !== 'Consultoria');
@@ -146,44 +169,57 @@ export default function App() {
     }
 
     const year = Number(batchYear);
-    const month = Number(batchMonth) - 1; // 0-indexed no JS
+    const month = Number(batchMonth) - 1;
     const daysInMonth = new Date(year, month + 1, 0).getDate();
 
     const newSchedulesToInsert = [];
 
     activeStudents.forEach(st => {
-      if (!st.fixed_days) return;
-      const daysArr = st.fixed_days.split(',').map(d => MAPA_DIAS_SEMANA[d.trim()]).filter(d => d !== undefined);
-      if (daysArr.length === 0) return;
+      let scheduleMap = {};
+      try {
+        scheduleMap = typeof st.fixed_days === 'string' && st.fixed_days.startsWith('{') 
+          ? JSON.parse(st.fixed_days) 
+          : {};
+      } catch (err) {
+        scheduleMap = {};
+      }
+
+      // Se for formato antigo (ex: "Seg,Ter")
+      if (Object.keys(scheduleMap).length === 0 && st.fixed_days) {
+        st.fixed_days.split(',').forEach(d => {
+          scheduleMap[d.trim()] = st.fixed_time || '08:00';
+        });
+      }
 
       for (let day = 1; day <= daysInMonth; day++) {
         const dateObj = new Date(year, month, day);
         const dayOfWeek = dateObj.getDay();
 
-        if (daysArr.includes(dayOfWeek)) {
-          const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-          
-          // Verifica se já não existe agendamento neste dia e horário para o aluno
-          const exists = schedules.some(sc => sc.studentid === st.id && sc.date === dateStr);
-          if (!exists) {
-            newSchedulesToInsert.push({
-              id: `${st.id}_${dateStr}_${Date.now()}_${Math.random()}`,
-              studentid: st.id,
-              studentname: st.name,
-              studentwhatsapp: st.whatsapp,
-              date: dateStr,
-              time: st.fixed_time || '08:00',
-              unit: st.unit || activeUnitsList[0] || 'Atendimento Domiciliar',
-              status: 'pending',
-              isbonus: false
-            });
+        Object.entries(scheduleMap).forEach(([dayLabel, timeVal]) => {
+          if (MAPA_DIAS_SEMANA[dayLabel] === dayOfWeek) {
+            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            
+            const exists = schedules.some(sc => sc.studentid === st.id && sc.date === dateStr);
+            if (!exists) {
+              newSchedulesToInsert.push({
+                id: `${st.id}_${dateStr}_${Date.now()}_${Math.random()}`,
+                studentid: st.id,
+                studentname: st.name,
+                studentwhatsapp: st.whatsapp,
+                date: dateStr,
+                time: timeVal || '08:00',
+                unit: st.unit || activeUnitsList[0] || 'Atendimento Domiciliar',
+                status: 'pending',
+                isbonus: false
+              });
+            }
           }
-        }
+        });
       }
     });
 
     if (newSchedulesToInsert.length === 0) {
-      alert('Nenhum novo agendamento precisou ser gerado (já existiam ou não há grades fixas configuradas).');
+      alert('Nenhum novo agendamento gerado (já existem ou não há grades fixas configuradas).');
       setShowBatchModal(false);
       return;
     }
@@ -192,7 +228,7 @@ export default function App() {
     if (error) {
       alert('Erro ao gerar agendamentos em massa: ' + error.message);
     } else {
-      alert(`Sucesso! ${newSchedulesToInsert.length} agendamentos foram criados para ${batchMonth}/${batchYear}!`);
+      alert(`Sucesso! ${newSchedulesToInsert.length} agendamentos gerados para ${batchMonth}/${batchYear}!`);
       fetchSchedules();
       setShowBatchModal(false);
     }
@@ -235,6 +271,19 @@ export default function App() {
     const defaultUnit = activeUnitsList[0] || 'Atendimento Domiciliar';
     if (student) {
       setEditingStudentId(student.id);
+      let parsedSchedule = {};
+      try {
+        parsedSchedule = typeof student.fixed_days === 'string' && student.fixed_days.startsWith('{') 
+          ? JSON.parse(student.fixed_days) 
+          : {};
+      } catch (err) { parsedSchedule = {}; }
+
+      if (Object.keys(parsedSchedule).length === 0 && student.fixed_days) {
+        student.fixed_days.split(',').forEach(d => {
+          parsedSchedule[d.trim()] = student.fixed_time || '08:00';
+        });
+      }
+
       setNewStudent({
         name: student.name || '',
         whatsapp: student.whatsapp || '',
@@ -245,8 +294,7 @@ export default function App() {
         unit: student.unit || defaultUnit,
         packtotal: student.packtotal ?? 4,
         monthly_fee: student.monthly_fee ?? 0,
-        fixed_days: student.fixed_days ? student.fixed_days.split(',') : [],
-        fixed_time: student.fixed_time || '08:00',
+        fixed_schedule: parsedSchedule,
         cycle_type: student.cycle_type || 'mês_vigente',
         due_day: student.due_day || 5
       });
@@ -254,7 +302,7 @@ export default function App() {
       setEditingStudentId(null);
       setNewStudent({ 
         name: '', whatsapp: '', email: '', birthdate: '', gender: 'Feminino', modality: 'Presencial',
-        unit: defaultUnit, packtotal: 4, monthly_fee: 0, fixed_days: [], fixed_time: '08:00', cycle_type: 'mês_vigente', due_day: 5 
+        unit: defaultUnit, packtotal: 4, monthly_fee: 0, fixed_schedule: {}, cycle_type: 'mês_vigente', due_day: 5 
       });
     }
     setShowStudentModal(true);
@@ -267,7 +315,6 @@ export default function App() {
         ...newStudent, 
         modality, 
         packtotal: 0, 
-        fixed_time: 'Sem horário fixo',
         unit: 'Sem Unidade / Online'
       });
     } else {
@@ -285,8 +332,9 @@ export default function App() {
     const payload = {
       ...newStudent,
       monthly_fee: Number(newStudent.monthly_fee),
-      fixed_days: newStudent.fixed_days.join(',')
+      fixed_days: JSON.stringify(newStudent.fixed_schedule)
     };
+    delete payload.fixed_schedule;
 
     if (editingStudentId) {
       const { error } = await supabase.from('students').update(payload).eq('id', editingStudentId);
@@ -503,7 +551,7 @@ export default function App() {
                   onClick={() => setShowBatchModal(true)}
                   className="bg-amber-500 text-white px-2.5 py-2 rounded-xl text-xs font-bold shadow flex items-center gap-1"
                 >
-                  ⚡ Gerar Mês
+                  ⚡ Gerar / Limpar Mês
                 </button>
                 <button 
                   onClick={() => setShowScheduleModal(true)}
@@ -640,7 +688,7 @@ export default function App() {
               </div>
             )}
 
-            {/* --- EXIBIÇÃO: VISÃO MÊS INTEIRO (CALENDÁRIO GRADE) --- */}
+            {/* --- EXIBIÇÃO: VISÃO MÊS INTEIRO --- */}
             {calendarView === 'mes' && (
               <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm space-y-2">
                 <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-slate-400">
@@ -669,7 +717,7 @@ export default function App() {
                               key={st.id} 
                               className={`px-1 py-0.5 rounded text-[8px] truncate font-semibold ${st.status === 'completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'}`}
                             >
-                              {st.studentname.split(' ')[0]}
+                              {st.time} {st.studentname.split(' ')[0]}
                             </div>
                           ))}
                         </div>
@@ -715,11 +763,6 @@ export default function App() {
                         </div>
                         <p className="text-xs text-slate-500 mt-1">{st.unit} • {st.whatsapp}</p>
                         <p className="text-xs font-bold text-emerald-600 mt-0.5">Mensalidade: R$ {st.monthly_fee || 0}</p>
-                        {st.fixed_days && st.modality !== 'Consultoria' && (
-                          <p className="text-[11px] text-indigo-600 font-medium mt-0.5">
-                            Grade Fixa: {st.fixed_days} {st.fixed_time ? `às ${st.fixed_time}` : ''}
-                          </p>
-                        )}
                       </div>
                       <button 
                         onClick={() => handleTogglePayment(st)}
@@ -832,9 +875,9 @@ export default function App() {
       {showBatchModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl p-5 w-full max-w-sm space-y-4">
-            <h3 className="text-lg font-bold text-slate-900">⚡ Gerar Grade em Massa</h3>
+            <h3 className="text-lg font-bold text-slate-900">⚡ Gerar ou Limpar Mês</h3>
             <p className="text-xs text-slate-500">
-              O sistema irá criar automaticamente todas as aulas do mês para os alunos ativos com base nos dias e horários da grade fixa de cada um.
+              Gere automaticamente as aulas do mês com base na grade fixa ou limpe os agendamentos do mês selecionado.
             </p>
 
             <form onSubmit={handleGenerateBatchSchedules} className="space-y-3">
@@ -862,9 +905,16 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="flex gap-2 pt-2">
-                <button type="button" onClick={() => setShowBatchModal(false)} className="w-1/2 py-2.5 border rounded-xl text-sm font-bold text-slate-600">Cancelar</button>
-                <button type="submit" className="w-1/2 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-bold">⚡ Gerar Aulas</button>
+              <div className="space-y-2 pt-2">
+                <button type="submit" className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-bold">
+                  ⚡ Gerar Aulas do Mês
+                </button>
+                <button type="button" onClick={handleClearMonthSchedules} className="w-full py-2.5 bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-sm font-bold">
+                  🗑️ Limpar Todos Agendamentos Deste Mês
+                </button>
+                <button type="button" onClick={() => setShowBatchModal(false)} className="w-full py-2 border rounded-xl text-xs font-bold text-slate-500">
+                  Fechar
+                </button>
               </div>
             </form>
           </div>
@@ -988,49 +1038,52 @@ export default function App() {
                 )}
               </div>
 
+              {/* SELEÇÃO DE DIAS E HORÁRIOS FLEXÍVEIS */}
               {newStudent.modality !== 'Consultoria' && (
-                <>
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">Dias da Grade Fixa</label>
-                    <div className="flex gap-1 overflow-x-auto pb-1">
-                      {DIAS_SEMANA.map(d => {
-                        const selected = newStudent.fixed_days.includes(d.label);
-                        return (
-                          <button 
-                            type="button" 
-                            key={d.id} 
+                <div className="space-y-2 border-t pt-2">
+                  <label className="text-xs font-bold text-slate-700 block">Grade Fixa (Selecione o Dia e o Horário)</label>
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                    {DIAS_SEMANA.map(d => {
+                      const isSelected = !!newStudent.fixed_schedule[d.label];
+                      return (
+                        <div key={d.id} className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
+                          <button
+                            type="button"
                             onClick={() => {
-                              const days = selected ? newStudent.fixed_days.filter(x => x !== d.label) : [...newStudent.fixed_days, d.label];
-                              setNewStudent({...newStudent, fixed_days: days});
+                              const newSched = { ...newStudent.fixed_schedule };
+                              if (isSelected) {
+                                delete newSched[d.label];
+                              } else {
+                                newSched[d.label] = '08:00';
+                              }
+                              setNewStudent({ ...newStudent, fixed_schedule: newSched });
                             }}
-                            className={`flex-1 min-w-[36px] py-1.5 text-xs font-bold rounded-lg border ${selected ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 text-slate-600'}`}
+                            className={`px-3 py-1 text-xs font-bold rounded-lg border min-w-[50px] ${isSelected ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600'}`}
                           >
                             {d.label}
                           </button>
-                        );
-                      })}
-                    </div>
+                          {isSelected && (
+                            <input
+                              type="time"
+                              value={newStudent.fixed_schedule[d.label] || '08:00'}
+                              onChange={e => {
+                                const newSched = { ...newStudent.fixed_schedule, [d.label]: e.target.value };
+                                setNewStudent({ ...newStudent, fixed_schedule: newSched });
+                              }}
+                              className="p-1 border rounded-lg text-xs bg-white font-bold"
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Horário Fixo</label>
-                      <input type="time" value={newStudent.fixed_time} onChange={e => setNewStudent({...newStudent, fixed_time: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" />
-                    </div>
-                    <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Dia Vencimento</label>
-                      <input type="number" min="1" max="31" value={newStudent.due_day} onChange={e => setNewStudent({...newStudent, due_day: Number(e.target.value)})} className="w-full p-2.5 border rounded-xl text-sm" />
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {newStudent.modality === 'Consultoria' && (
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">Dia Vencimento</label>
-                  <input type="number" min="1" max="31" value={newStudent.due_day} onChange={e => setNewStudent({...newStudent, due_day: Number(e.target.value)})} className="w-full p-2.5 border rounded-xl text-sm" />
                 </div>
               )}
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Dia Vencimento</label>
+                <input type="number" min="1" max="31" value={newStudent.due_day} onChange={e => setNewStudent({...newStudent, due_day: Number(e.target.value)})} className="w-full p-2.5 border rounded-xl text-sm" />
+              </div>
 
               <div className="flex gap-2 pt-2">
                 <button type="button" onClick={() => setShowStudentModal(false)} className="w-1/2 py-2.5 border rounded-xl text-sm font-bold text-slate-600">Cancelar</button>
