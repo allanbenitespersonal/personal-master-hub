@@ -47,6 +47,9 @@ export default function App() {
   const [filterUnit, setFilterUnit] = useState('Todas');
   const [filterTurn, setFilterTurn] = useState('Todos');
 
+  // --- ESTADO DA BUSCA DE ALUNOS ---
+  const [searchStudentTab, setSearchStudentTab] = useState('');
+
   // Modais
   const [showStudentModal, setShowStudentModal] = useState(false);
   const [editingStudentId, setEditingStudentId] = useState(null);
@@ -61,7 +64,6 @@ export default function App() {
   const [batchYear, setBatchYear] = useState(new Date().getFullYear());
   const [batchMonth, setBatchMonth] = useState(new Date().getMonth() + 1);
   
-  // Estrutura de Aluno com suporte a mapa de dias/horários: { "Seg": "07:00", "Ter": "18:00" }
   const [newStudent, setNewStudent] = useState({ 
     name: '', whatsapp: '', email: '', birthdate: '', gender: 'Feminino', modality: 'Presencial',
     unit: '', packtotal: 4, monthly_fee: 0, fixed_schedule: {}, cycle_type: 'mês_vigente', due_day: 5 
@@ -92,7 +94,11 @@ export default function App() {
   const fetchStudents = async () => {
     const { data, error } = await supabase.from('students').select('*');
     if (error) console.error(error);
-    if (data) setStudents(data);
+    if (data) {
+      // Ordena por ordem alfabética de A a Z
+      const sorted = [...data].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
+      setStudents(sorted);
+    }
   };
 
   const fetchSchedules = async () => {
@@ -139,7 +145,7 @@ export default function App() {
 
   const activeUnitsList = units.filter(u => u.active).map(u => u.name);
 
-  // --- LIMPAR MÊS QUE FOI GERADO ERRADO ---
+  // --- LIMPAR MÊS ---
   const handleClearMonthSchedules = async () => {
     const year = Number(batchYear);
     const monthStr = String(batchMonth).padStart(2, '0');
@@ -159,7 +165,7 @@ export default function App() {
     }
   };
 
-  // --- GERAÇÃO EM MASSA DA GRADE COM HORÁRIOS MÚLTIPLOS ---
+  // --- GERAÇÃO EM MASSA ---
   const handleGenerateBatchSchedules = async (e) => {
     e.preventDefault();
     const activeStudents = students.filter(s => (s.active ?? true) && s.modality !== 'Consultoria');
@@ -184,7 +190,6 @@ export default function App() {
         scheduleMap = {};
       }
 
-      // Se for formato antigo (ex: "Seg,Ter")
       if (Object.keys(scheduleMap).length === 0 && st.fixed_days) {
         st.fixed_days.split(',').forEach(d => {
           scheduleMap[d.trim()] = st.fixed_time || '08:00';
@@ -264,6 +269,13 @@ export default function App() {
     const matchUnit = filterUnit === 'Todas' ? true : s.unit === filterUnit;
     const matchTurn = matchesTurn(s.time, filterTurn);
     return matchStudent && matchUnit && matchTurn;
+  });
+
+  // Alunos Filtrados e Ordenados para a Aba Alunos
+  const filteredStudentsTab = students.filter(st => {
+    if (!searchStudentTab.trim()) return true;
+    const term = searchStudentTab.toLowerCase();
+    return st.name.toLowerCase().includes(term) || (st.whatsapp && st.whatsapp.includes(term));
   });
 
   // --- GESTÃO DE ALUNOS ---
@@ -745,8 +757,22 @@ export default function App() {
               </div>
             </div>
 
+            {/* BARRA DE PESQUISA DE ALUNOS (A-Z) */}
+            <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between gap-2">
+              <input 
+                type="text" 
+                placeholder="🔍 Pesquisar aluno por nome ou telefone..." 
+                value={searchStudentTab} 
+                onChange={e => setSearchStudentTab(e.target.value)} 
+                className="w-full p-2 border rounded-xl text-xs" 
+              />
+              <span className="text-[10px] font-bold bg-indigo-50 text-indigo-700 px-2 py-1 rounded-lg border border-indigo-200 whitespace-nowrap">
+                A-Z ({filteredStudentsTab.length})
+              </span>
+            </div>
+
             <div className="space-y-3">
-              {students.map(st => {
+              {filteredStudentsTab.map(st => {
                 const isActive = st.active ?? true;
                 return (
                   <div key={st.id} className={`p-4 bg-white rounded-2xl border shadow-sm space-y-3 ${!isActive ? 'opacity-60 bg-slate-50 border-slate-200' : 'border-slate-200'}`}>
@@ -804,6 +830,9 @@ export default function App() {
                   </div>
                 );
               })}
+              {filteredStudentsTab.length === 0 && (
+                <p className="text-center text-slate-400 py-8 text-sm">Nenhum aluno encontrado.</p>
+              )}
             </div>
           </div>
         )}
