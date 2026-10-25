@@ -117,9 +117,20 @@ export default function App() {
 
   const handleModalityChange = (modality) => {
     if (modality === 'Consultoria') {
-      setNewStudent({ ...newStudent, modality, packtotal: 0, fixed_time: 'Sem horário fixo' });
+      setNewStudent({ 
+        ...newStudent, 
+        modality, 
+        packtotal: 0, 
+        fixed_time: 'Sem horário fixo',
+        unit: 'Sem Unidade / Online'
+      });
     } else {
-      setNewStudent({ ...newStudent, modality, packtotal: newStudent.packtotal === 0 ? 4 : newStudent.packtotal });
+      setNewStudent({ 
+        ...newStudent, 
+        modality, 
+        packtotal: newStudent.packtotal === 0 ? 4 : newStudent.packtotal,
+        unit: newStudent.unit === 'Sem Unidade / Online' ? UNIDADES[0] : newStudent.unit
+      });
     }
   };
 
@@ -431,7 +442,7 @@ export default function App() {
                         </div>
                         <p className="text-xs text-slate-500 mt-1">{st.unit} • {st.whatsapp}</p>
                         <p className="text-xs font-bold text-emerald-600 mt-0.5">Mensalidade: R$ {st.monthly_fee || 0}</p>
-                        {st.fixed_days && (
+                        {st.fixed_days && st.modality !== 'Consultoria' && (
                           <p className="text-[11px] text-indigo-600 font-medium mt-0.5">
                             Grade Fixa: {st.fixed_days} {st.fixed_time ? `às ${st.fixed_time}` : ''}
                           </p>
@@ -481,7 +492,7 @@ export default function App() {
           </div>
         )}
 
-        {/* --- ABA PAINEL FINANCEIRO (EDITÁVEL) --- */}
+        {/* --- ABA PAINEL FINANCEIRO --- */}
         {activeTab === 'financeiro' && (
           <div className="space-y-4">
             <h2 className="text-xl font-bold text-slate-800">Painel Financeiro</h2>
@@ -501,7 +512,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Ajuste de mensalidade por aluno */}
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
               <h3 className="text-sm font-bold text-slate-800">Ajuste de Valores dos Alunos (Mês Vigente)</h3>
               <div className="space-y-2">
@@ -525,7 +535,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Configuração do Pix */}
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
               <h3 className="text-sm font-bold text-slate-800">Sua Chave Pix para Cobrança</h3>
               <form onSubmit={handleSavePix} className="flex gap-2">
@@ -614,47 +623,58 @@ export default function App() {
 
               <div>
                 <label className="text-xs font-bold text-slate-700 block mb-1">Unidade Principal</label>
-                <select value={newStudent.unit} onChange={e => setNewStudent({...newStudent, unit: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm">
-                  {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
-                </select>
+                {newStudent.modality === 'Consultoria' ? (
+                  <input type="text" readOnly value="Sem Unidade / Online" className="w-full p-2.5 border rounded-xl text-sm bg-slate-100 text-slate-500 italic" />
+                ) : (
+                  <select value={newStudent.unit} onChange={e => setNewStudent({...newStudent, unit: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm">
+                    {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                )}
               </div>
 
-              <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Dias da Grade Fixa</label>
-                <div className="flex gap-1 overflow-x-auto pb-1">
-                  {DIAS_SEMANA.map(d => {
-                    const selected = newStudent.fixed_days.includes(d.label);
-                    return (
-                      <button 
-                        type="button" 
-                        key={d.id} 
-                        onClick={() => {
-                          const days = selected ? newStudent.fixed_days.filter(x => x !== d.label) : [...newStudent.fixed_days, d.label];
-                          setNewStudent({...newStudent, fixed_days: days});
-                        }}
-                        className={`flex-1 min-w-[36px] py-1.5 text-xs font-bold rounded-lg border ${selected ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 text-slate-600'}`}
-                      >
-                        {d.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+              {newStudent.modality !== 'Consultoria' && (
+                <>
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Dias da Grade Fixa</label>
+                    <div className="flex gap-1 overflow-x-auto pb-1">
+                      {DIAS_SEMANA.map(d => {
+                        const selected = newStudent.fixed_days.includes(d.label);
+                        return (
+                          <button 
+                            type="button" 
+                            key={d.id} 
+                            onClick={() => {
+                              const days = selected ? newStudent.fixed_days.filter(x => x !== d.label) : [...newStudent.fixed_days, d.label];
+                              setNewStudent({...newStudent, fixed_days: days});
+                            }}
+                            className={`flex-1 min-w-[36px] py-1.5 text-xs font-bold rounded-lg border ${selected ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 text-slate-600'}`}
+                          >
+                            {d.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">Horário Fixo</label>
-                  {newStudent.modality === 'Consultoria' ? (
-                    <input type="text" readOnly value="Sem horário fixo" className="w-full p-2.5 border rounded-xl text-sm bg-slate-100 text-slate-500" />
-                  ) : (
-                    <input type="time" value={newStudent.fixed_time} onChange={e => setNewStudent({...newStudent, fixed_time: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" />
-                  )}
-                </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 block mb-1">Horário Fixo</label>
+                      <input type="time" value={newStudent.fixed_time} onChange={e => setNewStudent({...newStudent, fixed_time: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 block mb-1">Dia Vencimento</label>
+                      <input type="number" min="1" max="31" value={newStudent.due_day} onChange={e => setNewStudent({...newStudent, due_day: Number(e.target.value)})} className="w-full p-2.5 border rounded-xl text-sm" />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {newStudent.modality === 'Consultoria' && (
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-1">Dia Vencimento</label>
                   <input type="number" min="1" max="31" value={newStudent.due_day} onChange={e => setNewStudent({...newStudent, due_day: Number(e.target.value)})} className="w-full p-2.5 border rounded-xl text-sm" />
                 </div>
-              </div>
+              )}
 
               <div className="flex gap-2 pt-2">
                 <button type="button" onClick={() => setShowStudentModal(false)} className="w-1/2 py-2.5 border rounded-xl text-sm font-bold text-slate-600">Cancelar</button>
