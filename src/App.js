@@ -772,7 +772,7 @@ export default function App() {
         </button>
       </header>
 
-      <main className="p-4 max-w-lg mx-auto">
+      <main className="p-4 max-w-4xl mx-auto">
         {/* --- ABA AGENDA MASTER --- */}
         {activeTab === 'agenda' && (
           <div className="space-y-4">
@@ -859,7 +859,7 @@ export default function App() {
 
             {/* --- EXIBIÇÃO: VISÃO DIA --- */}
             {calendarView === 'dia' && (
-              <div className="space-y-3">
+              <div className="space-y-3 max-w-lg mx-auto">
                 {filteredSchedules
                   .filter(s => s.date === formatDateYYYYMMDD(currentDate))
                   .sort((a, b) => a.time.localeCompare(b.time))
@@ -925,10 +925,10 @@ export default function App() {
               </div>
             )}
 
-            {/* --- EXIBIÇÃO: VISÃO SEMANA --- */}
+            {/* --- EXIBIÇÃO: VISÃO SEMANA LARA E AMPLA --- */}
             {calendarView === 'semana' && (
-              <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
-                <div className="grid grid-cols-7 gap-1.5 min-w-[650px]">
+              <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
+                <div className="grid grid-cols-7 gap-2 min-w-[1000px]">
                   {getWeekDaysArray(currentDate).map((wDay) => {
                     const daySchedules = filteredSchedules
                       .filter(s => s.date === wDay.dateStr)
@@ -939,14 +939,14 @@ export default function App() {
                     return (
                       <div 
                         key={wDay.dateStr} 
-                        className={`border rounded-xl p-1.5 min-h-[300px] flex flex-col justify-start space-y-1.5 ${isToday ? 'border-indigo-600 bg-indigo-50/20' : 'border-slate-200 bg-slate-50/50'}`}
+                        className={`border rounded-xl p-2 min-h-[380px] flex flex-col justify-start space-y-2 ${isToday ? 'border-indigo-600 bg-indigo-50/20' : 'border-slate-200 bg-slate-50/50'}`}
                       >
-                        <div className={`text-center py-1 rounded-lg ${isToday ? 'bg-indigo-600 text-white font-bold' : 'bg-slate-200 text-slate-700 font-semibold'}`}>
-                          <span className="text-[10px] uppercase block">{wDay.dayLabel}</span>
-                          <span className="text-xs font-extrabold">{wDay.dayNumber}</span>
+                        <div className={`text-center py-1.5 rounded-lg ${isToday ? 'bg-indigo-600 text-white font-bold' : 'bg-slate-200 text-slate-700 font-semibold'}`}>
+                          <span className="text-[11px] uppercase block">{wDay.dayLabel}</span>
+                          <span className="text-sm font-extrabold">{wDay.dayNumber}</span>
                         </div>
 
-                        <div className="space-y-1.5 overflow-y-auto">
+                        <div className="space-y-2 overflow-y-auto">
                           {daySchedules.map(sc => (
                             <div 
                               key={sc.id} 
@@ -954,18 +954,18 @@ export default function App() {
                                 setCurrentDate(new Date(`${sc.date}T00:00:00`));
                                 setCalendarView('dia');
                               }}
-                              className={`p-1.5 rounded-lg border text-[9px] shadow-sm cursor-pointer transition ${sc.status === 'completed' ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-white border-slate-200 text-slate-800 hover:border-indigo-400'}`}
+                              className={`p-2 rounded-xl border text-xs shadow-sm cursor-pointer transition ${sc.status === 'completed' ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-white border-slate-200 text-slate-800 hover:border-indigo-400'}`}
                             >
-                              <div className="flex justify-between items-center font-bold text-indigo-600">
+                              <div className="flex justify-between items-center font-bold text-indigo-600 text-[11px]">
                                 <span>{sc.time}</span>
-                                {sc.status === 'completed' && <span>✓</span>}
+                                {sc.status === 'completed' && <span className="text-emerald-600">✓</span>}
                               </div>
-                              <div className="font-bold truncate text-slate-900 mt-0.5">{sc.studentname}</div>
-                              <div className="text-[8px] text-slate-400 truncate">{sc.unit}</div>
+                              <div className="font-bold text-slate-900 mt-1 leading-snug">{sc.studentname}</div>
+                              <div className="text-[10px] text-slate-500 mt-0.5 font-medium">{sc.unit}</div>
                             </div>
                           ))}
                           {daySchedules.length === 0 && (
-                            <div className="text-center text-[9px] text-slate-300 py-4">Sem aulas</div>
+                            <div className="text-center text-xs text-slate-300 py-6 font-medium">Sem aulas</div>
                           )}
                         </div>
                       </div>
@@ -1019,7 +1019,7 @@ export default function App() {
 
         {/* --- ABA ALUNOS & VOUCHERS --- */}
         {activeTab === 'alunos' && (
-          <div className="space-y-4">
+          <div className="space-y-4 max-w-lg mx-auto">
             <div className="flex justify-between items-center">
               <div>
                 <h2 className="text-xl font-bold text-slate-800">Alunos & Vouchers</h2>
@@ -1148,7 +1148,7 @@ export default function App() {
 
         {/* --- ABA PAINEL FINANCEIRO INTELIGENTE --- */}
         {activeTab === 'financeiro' && (
-          <div className="space-y-4">
+          <div className="space-y-4 max-w-lg mx-auto">
             <div className="flex justify-between items-center">
               <h2 className="text-xl font-bold text-slate-800">Painel Financeiro</h2>
               <span className="text-xs font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-full">
