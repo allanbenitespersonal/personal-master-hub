@@ -6,15 +6,6 @@ const SUPABASE_URL = 'https://hagwcvhsizwovxqgbmin.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_eS7_vdQBFvMEAuhExjj7TQ_VdRQXQuE';
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// --- UNIDADES ---
-const UNIDADES = [
-  'EC Grand Park',
-  'EC Alvorada',
-  'MF São João',
-  'MF Country',
-  'Atendimento Domiciliar'
-];
-
 const PACK_OPTIONS = [
   { label: '0 Aulas (Consultoria)', value: 0 },
   { label: '4 Aulas (1x/semana)', value: 4 },
@@ -42,6 +33,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('agenda');
   const [students, setStudents] = useState([]);
   const [schedules, setSchedules] = useState([]);
+  const [units, setUnits] = useState([]);
   const [selectedUnit, setSelectedUnit] = useState('Todas');
   const [pixKey, setPixKey] = useState(localStorage.getItem('pix_key') || '');
   
@@ -50,20 +42,36 @@ export default function App() {
   const [editingStudentId, setEditingStudentId] = useState(null);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
+  const [showUnitsModal, setShowUnitsModal] = useState(false);
   const [selectedSchedule, setSelectedSchedule] = useState(null);
 
   // Formulários
+  const [newUnitName, setNewUnitName] = useState('');
   const [newStudent, setNewStudent] = useState({ 
     name: '', whatsapp: '', email: '', birthdate: '', gender: 'Feminino', modality: 'Presencial',
-    unit: UNIDADES[0], packtotal: 4, monthly_fee: 0, fixed_days: [], fixed_time: '08:00', cycle_type: 'mês_vigente', due_day: 5 
+    unit: '', packtotal: 4, monthly_fee: 0, fixed_days: [], fixed_time: '08:00', cycle_type: 'mês_vigente', due_day: 5 
   });
-  const [newSchedule, setNewSchedule] = useState({ studentid: '', date: new Date().toISOString().split('T')[0], time: '08:00', unit: UNIDADES[0] });
+  const [newSchedule, setNewSchedule] = useState({ studentid: '', date: new Date().toISOString().split('T')[0], time: '08:00', unit: '' });
   const [rescheduleData, setRescheduleData] = useState({ date: '', time: '' });
 
   useEffect(() => {
     fetchStudents();
     fetchSchedules();
+    fetchUnits();
   }, []);
+
+  const fetchUnits = async () => {
+    const { data, error } = await supabase.from('units').select('*');
+    if (error) console.error(error);
+    if (data && data.length > 0) {
+      setUnits(data);
+      if (!newStudent.unit) {
+        const firstActive = data.find(u => u.active)?.name || data[0].name;
+        setNewStudent(prev => ({ ...prev, unit: firstActive }));
+        setNewSchedule(prev => ({ ...prev, unit: firstActive }));
+      }
+    }
+  };
 
   const fetchStudents = async () => {
     const { data, error } = await supabase.from('students').select('*');
@@ -86,8 +94,38 @@ export default function App() {
     }
   };
 
+  // --- GESTÃO DE UNIDADES ---
+  const handleAddUnit = async (e) => {
+    e.preventDefault();
+    if (!newUnitName.trim()) return;
+    const unitObj = { id: Date.now().toString(), name: newUnitName.trim(), active: true };
+    const { error } = await supabase.from('units').insert([unitObj]);
+    if (error) alert('Erro ao adicionar unidade: ' + error.message);
+    else {
+      setNewUnitName('');
+      fetchUnits();
+    }
+  };
+
+  const handleToggleUnitActive = async (unit) => {
+    const { error } = await supabase.from('units').update({ active: !unit.active }).eq('id', unit.id);
+    if (error) alert('Erro ao alterar status da unidade: ' + error.message);
+    else fetchUnits();
+  };
+
+  const handleDeleteUnit = async (id) => {
+    if (window.confirm('Tem certeza que deseja excluir esta unidade?')) {
+      const { error } = await supabase.from('units').delete().eq('id', id);
+      if (error) alert('Erro ao excluir unidade: ' + error.message);
+      else fetchUnits();
+    }
+  };
+
   // --- GESTÃO DE ALUNOS ---
+  const activeUnitsList = units.filter(u => u.active).map(u => u.name);
+
   const handleOpenStudentModal = (student = null) => {
+    const defaultUnit = activeUnitsList[0] || 'Atendimento Domiciliar';
     if (student) {
       setEditingStudentId(student.id);
       setNewStudent({
@@ -97,7 +135,7 @@ export default function App() {
         birthdate: student.birthdate || '',
         gender: student.gender || 'Feminino',
         modality: student.modality || 'Presencial',
-        unit: student.unit || UNIDADES[0],
+        unit: student.unit || defaultUnit,
         packtotal: student.packtotal ?? 4,
         monthly_fee: student.monthly_fee ?? 0,
         fixed_days: student.fixed_days ? student.fixed_days.split(',') : [],
@@ -109,13 +147,14 @@ export default function App() {
       setEditingStudentId(null);
       setNewStudent({ 
         name: '', whatsapp: '', email: '', birthdate: '', gender: 'Feminino', modality: 'Presencial',
-        unit: UNIDADES[0], packtotal: 4, monthly_fee: 0, fixed_days: [], fixed_time: '08:00', cycle_type: 'mês_vigente', due_day: 5 
+        unit: defaultUnit, packtotal: 4, monthly_fee: 0, fixed_days: [], fixed_time: '08:00', cycle_type: 'mês_vigente', due_day: 5 
       });
     }
     setShowStudentModal(true);
   };
 
   const handleModalityChange = (modality) => {
+    const defaultUnit = activeUnitsList[0] || 'Atendimento Domiciliar';
     if (modality === 'Consultoria') {
       setNewStudent({ 
         ...newStudent, 
@@ -129,7 +168,7 @@ export default function App() {
         ...newStudent, 
         modality, 
         packtotal: newStudent.packtotal === 0 ? 4 : newStudent.packtotal,
-        unit: newStudent.unit === 'Sem Unidade / Online' ? UNIDADES[0] : newStudent.unit
+        unit: newStudent.unit === 'Sem Unidade / Online' ? defaultUnit : newStudent.unit
       });
     }
   };
@@ -343,14 +382,14 @@ export default function App() {
               </button>
             </div>
 
-            <div className="flex gap-2 overflow-x-auto pb-2">
+            <div className="flex gap-2 overflow-x-auto pb-2 items-center">
               <button 
                 onClick={() => setSelectedUnit('Todas')}
                 className={`px-3 py-1.5 text-xs font-semibold rounded-full whitespace-nowrap ${selectedUnit === 'Todas' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 border'}`}
               >
                 Todas Unidades
               </button>
-              {UNIDADES.map(u => (
+              {activeUnitsList.map(u => (
                 <button 
                   key={u}
                   onClick={() => setSelectedUnit(u)}
@@ -359,6 +398,9 @@ export default function App() {
                   {u}
                 </button>
               ))}
+              <button onClick={() => setShowUnitsModal(true)} className="px-2.5 py-1.5 text-xs font-bold text-indigo-600 border border-indigo-200 bg-indigo-50 rounded-full whitespace-nowrap">
+                ⚙️ Unidades
+              </button>
             </div>
 
             <div className="space-y-3">
@@ -419,9 +461,14 @@ export default function App() {
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="text-xl font-bold text-slate-800">Alunos & Vouchers</h2>
-              <button onClick={() => handleOpenStudentModal()} className="bg-indigo-600 text-white p-2.5 rounded-xl text-sm font-semibold shadow">
-                + Cadastrar Aluno
-              </button>
+              <div className="flex gap-2">
+                <button onClick={() => setShowUnitsModal(true)} className="bg-slate-200 text-slate-700 p-2.5 rounded-xl text-sm font-semibold">
+                  ⚙️ Unidades
+                </button>
+                <button onClick={() => handleOpenStudentModal()} className="bg-indigo-600 text-white p-2.5 rounded-xl text-sm font-semibold shadow">
+                  + Cadastrar Aluno
+                </button>
+              </div>
             </div>
 
             <div className="space-y-3">
@@ -555,6 +602,46 @@ export default function App() {
         )}
       </main>
 
+      {/* --- MODAL GESTÃO DE UNIDADES --- */}
+      {showUnitsModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-5 w-full max-w-sm space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-bold text-slate-900">Gerenciar Unidades</h3>
+              <button onClick={() => setShowUnitsModal(false)} className="text-slate-400 text-sm font-bold">✕</button>
+            </div>
+
+            <form onSubmit={handleAddUnit} className="flex gap-2">
+              <input 
+                required 
+                type="text" 
+                placeholder="Nova Unidade (ex: EC Moinhos)" 
+                value={newUnitName} 
+                onChange={e => setNewUnitName(e.target.value)} 
+                className="flex-1 p-2.5 border rounded-xl text-sm" 
+              />
+              <button type="submit" className="bg-indigo-600 text-white px-3.5 rounded-xl text-xs font-bold">+ Adicionar</button>
+            </form>
+
+            <div className="space-y-2 pt-2">
+              {units.map(u => (
+                <div key={u.id} className="flex items-center justify-between p-2.5 bg-slate-50 border rounded-xl">
+                  <span className={`text-sm font-bold ${!u.active ? 'line-through text-slate-400' : 'text-slate-800'}`}>{u.name}</span>
+                  <div className="flex gap-2 text-xs">
+                    <button onClick={() => handleToggleUnitActive(u)} className={u.active ? 'text-amber-600 font-bold' : 'text-emerald-600 font-bold'}>
+                      {u.active ? 'Pausar' : 'Ativar'}
+                    </button>
+                    <button onClick={() => handleDeleteUnit(u.id)} className="text-rose-600 font-bold">
+                      Excluir
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* --- MODAL CADASTRO / EDIÇÃO DE ALUNO --- */}
       {showStudentModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -627,7 +714,7 @@ export default function App() {
                   <input type="text" readOnly value="Sem Unidade / Online" className="w-full p-2.5 border rounded-xl text-sm bg-slate-100 text-slate-500 italic" />
                 ) : (
                   <select value={newStudent.unit} onChange={e => setNewStudent({...newStudent, unit: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm">
-                    {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
+                    {activeUnitsList.map(u => <option key={u} value={u}>{u}</option>)}
                   </select>
                 )}
               </div>
@@ -698,7 +785,7 @@ export default function App() {
               <input required type="date" value={newSchedule.date} onChange={e => setNewSchedule({...newSchedule, date: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" />
               <input required type="time" value={newSchedule.time} onChange={e => setNewSchedule({...newSchedule, time: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm" />
               <select value={newSchedule.unit} onChange={e => setNewSchedule({...newSchedule, unit: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm">
-                {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
+                {activeUnitsList.map(u => <option key={u} value={u}>{u}</option>)}
               </select>
               <div className="flex gap-2 pt-2">
                 <button type="button" onClick={() => setShowScheduleModal(false)} className="w-1/2 py-2.5 border rounded-xl text-sm font-bold text-slate-600">Cancelar</button>
