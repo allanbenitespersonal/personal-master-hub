@@ -54,8 +54,18 @@ export default function App() {
   const [filterStatusTab, setFilterStatusTab] = useState('Todos');
   const [filterModalityTab, setFilterModalityTab] = useState('Todas');
 
-  // --- FINANCEIRO ---
+  // --- FINANCEIRO AVANÇADO ---
   const [financePeriod, setFinancePeriod] = useState('mensal');
+  const [filterRefMonth, setFilterRefMonth] = useState(`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`);
+  const [filterSelectedStudents, setFilterSelectedStudents] = useState([]);
+  const [filterPaymentMethod, setFilterPaymentMethod] = useState('Todos');
+
+  // Formulário de Lançamento Manual no Financeiro
+  const [manualPayStudents, setManualPayStudents] = useState([]);
+  const [manualPayRefMonth, setManualPayRefMonth] = useState(`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`);
+  const [manualPayAmount, setManualPayAmount] = useState('');
+  const [manualPayMethod, setManualPayMethod] = useState('Pix');
+  const [manualPayDetails, setManualPayDetails] = useState('');
 
   // Modais
   const [showStudentModal, setShowStudentModal] = useState(false);
@@ -68,7 +78,7 @@ export default function App() {
   const [selectedStudentForPayment, setSelectedStudentForPayment] = useState(null);
   const [selectedSchedule, setSelectedSchedule] = useState(null);
 
-  // Formulários
+  // Formulários Gerais
   const [newUnitName, setNewUnitName] = useState('');
   const [batchYear, setBatchYear] = useState(new Date().getFullYear());
   const [batchMonth, setBatchMonth] = useState(new Date().getMonth() + 1);
@@ -76,7 +86,8 @@ export default function App() {
   const [paymentForm, setPaymentForm] = useState({
     method: 'Pix',
     details: '',
-    amount: 0
+    amount: 0,
+    refMonth: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
   });
 
   const [newStudent, setNewStudent] = useState({ 
@@ -93,43 +104,7 @@ export default function App() {
     fetchSchedules();
     fetchUnits();
     fetchTransactions();
-    requestNotificationPermission();
   }, []);
-
-  useEffect(() => {
-    if (schedules.length === 0) return;
-
-    const interval = setInterval(() => {
-      const now = new Date();
-      schedules.forEach(s => {
-        if (s.status === 'pending' && s.time !== 'Sem horário fixo') {
-          const classTime = new Date(`${s.date}T${s.time}`);
-          const diffHours = (now - classTime) / (1000 * 60 * 60);
-
-          if (diffHours >= 2 && diffHours < 3) {
-            triggerPushNotification('Validação de Check-in Pendente', {
-              body: `A aula de ${s.studentname} (${s.time}) ocorreu há 2 horas. Lembre-se de validar o check-in!`,
-              icon: '/favicon.ico'
-            });
-          }
-        }
-      });
-    }, 15 * 60 * 1000);
-
-    return () => clearInterval(interval);
-  }, [schedules]);
-
-  const requestNotificationPermission = () => {
-    if ('Notification' in window && Notification.permission !== 'granted') {
-      Notification.requestPermission();
-    }
-  };
-
-  const triggerPushNotification = (title, options) => {
-    if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification(title, options);
-    }
-  };
 
   const fetchUnits = async () => {
     const { data, error } = await supabase.from('units').select('*');
@@ -203,11 +178,13 @@ export default function App() {
   const activeUnitsList = units.filter(u => u.active).map(u => u.name);
 
   const handleOpenPaymentModal = (student) => {
+    const currentRef = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
     setSelectedStudentForPayment(student);
     setPaymentForm({
       method: student.preferred_payment || 'Pix',
       details: '',
-      amount: student.monthly_fee || 0
+      amount: student.monthly_fee || 0,
+      refMonth: currentRef
     });
     setShowPaymentModal(true);
   };
@@ -216,8 +193,6 @@ export default function App() {
     e.preventDefault();
     if (!selectedStudentForPayment) return;
 
-    const currentRefMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
-
     const transactionObj = {
       id: Date.now().toString(),
       student_id: selectedStudentForPayment.id,
@@ -225,7 +200,7 @@ export default function App() {
       amount: Number(paymentForm.amount),
       payment_method: paymentForm.method,
       payment_details: paymentForm.method === 'Misto / Dividido' ? paymentForm.details : paymentForm.method,
-      reference_month: currentRefMonth
+      reference_month: paymentForm.refMonth
     };
 
     const { error: txError } = await supabase.from('transactions').insert([transactionObj]);
@@ -238,10 +213,55 @@ export default function App() {
     if (stError) {
       alert('Erro ao atualizar status do aluno: ' + stError.message);
     } else {
-      alert('Pagamento registrado com sucesso!');
+      alert(`Pagamento de R$ ${paymentForm.amount} registrado para ${selectedStudentForPayment.name} (Ref: ${paymentForm.refMonth})!`);
       fetchStudents();
       fetchTransactions();
       setShowPaymentModal(false);
+    }
+  };
+
+  const handleAddBatchTransactions = async (e) => {
+    e.preventDefault();
+    if (manualPayStudents.length === 0) {
+      alert('Selecione pelo menos um aluno.');
+      return;
+    }
+    if (!manualPayAmount || Number(manualPayAmount) <= 0) {
+      alert('Informe um valor válido.');
+      return;
+    }
+
+    const newTxs = manualPayStudents.map(stId => {
+      const st = students.find(s => s.id === stId);
+      return {
+        id: `${stId}_${Date.now()}_${Math.random()}`,
+        student_id: stId,
+        student_name: st ? st.name : 'Aluno',
+        amount: Number(manualPayAmount),
+        payment_method: manualPayMethod,
+        payment_details: manualPayMethod === 'Misto / Dividido' ? manualPayDetails : manualPayMethod,
+        reference_month: manualPayRefMonth
+      };
+    });
+
+    const { error } = await supabase.from('transactions').insert(newTxs);
+    if (error) {
+      alert('Erro ao registrar pagamentos: ' + error.message);
+    } else {
+      alert(`Lançamento efetuado com sucesso para ${newTxs.length} aluno(s) referente a ${manualPayRefMonth}!`);
+      setManualPayStudents([]);
+      setManualPayAmount('');
+      setManualPayDetails('');
+      fetchTransactions();
+      fetchStudents();
+    }
+  };
+
+  const handleDeleteTransaction = async (id) => {
+    if (window.confirm('Deseja cancelar/excluir este registro de pagamento?')) {
+      const { error } = await supabase.from('transactions').delete().eq('id', id);
+      if (error) alert('Erro ao excluir: ' + error.message);
+      else fetchTransactions();
     }
   };
 
@@ -659,60 +679,16 @@ export default function App() {
   };
 
   const activeStudents = students.filter(st => st.active ?? true);
-  const now = new Date();
 
-  const getActiveMonthsInPeriod = (startDateStr, periodMonths) => {
-    const startDate = startDateStr ? new Date(`${startDateStr}T00:00:00`) : new Date(2020, 0, 1);
-    let monthsToCount = 0;
-
-    for (let i = 0; i < periodMonths; i++) {
-      const targetMonthDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      if (startDate <= new Date(targetMonthDate.getFullYear(), targetMonthDate.getMonth() + 1, 0)) {
-        monthsToCount++;
-      }
-    }
-    return monthsToCount;
-  };
-
-  const periodMonths = financePeriod === 'mensal' ? 1 : financePeriod === 'trimestral' ? 3 : financePeriod === 'semestral' ? 6 : 12;
-
-  const totalPeriodGross = activeStudents.reduce((acc, st) => {
-    const activeMonths = getActiveMonthsInPeriod(st.start_date, periodMonths);
-    return acc + (Number(st.monthly_fee || 0) * activeMonths);
-  }, 0);
-
-  const totalPaidPeriod = activeStudents.reduce((acc, st) => {
-    if (st.paymentpending) return acc;
-    const activeMonths = getActiveMonthsInPeriod(st.start_date, periodMonths);
-    return acc + (Number(st.monthly_fee || 0) * activeMonths);
-  }, 0);
-
-  const totalPendingPeriod = activeStudents.reduce((acc, st) => {
-    if (!st.paymentpending) return acc;
-    const activeMonths = getActiveMonthsInPeriod(st.start_date, periodMonths);
-    return acc + (Number(st.monthly_fee || 0) * activeMonths);
-  }, 0);
-
-  const defaultRate = totalPeriodGross > 0 ? ((totalPendingPeriod / totalPeriodGross) * 100).toFixed(1) : 0;
-  const avgTicket = activeStudents.length > 0 ? (activeStudents.reduce((acc, st) => acc + Number(st.monthly_fee || 0), 0) / activeStudents.length).toFixed(0) : 0;
-
-  const paymentMethodTotals = FORMAS_PAGAMENTO.reduce((acc, method) => {
-    const sum = transactions
-      .filter(t => t.payment_method === method)
-      .reduce((tAcc, t) => tAcc + Number(t.amount || 0), 0);
-    acc[method] = sum;
-    return acc;
-  }, {});
-
-  const modalityStats = MODALIDADES.map(m => {
-    const mStudents = activeStudents.filter(st => (st.modality || 'Presencial') === m);
-    const mRevenue = mStudents.reduce((acc, st) => {
-      const activeMonths = getActiveMonthsInPeriod(st.start_date, periodMonths);
-      return acc + (Number(st.monthly_fee || 0) * activeMonths);
-    }, 0);
-    const percent = totalPeriodGross > 0 ? Math.round((mRevenue / totalPeriodGross) * 100) : 0;
-    return { name: m, count: mStudents.length, revenue: mRevenue, percent };
+  // --- FILTRAGEM DE TRANSAÇÕES FINANCEIRAS ---
+  const filteredTransactions = transactions.filter(t => {
+    const matchMonth = filterRefMonth === 'Todos' || !filterRefMonth ? true : (t.reference_month === filterRefMonth);
+    const matchStudents = filterSelectedStudents.length === 0 ? true : filterSelectedStudents.includes(t.student_id);
+    const matchMethod = filterPaymentMethod === 'Todos' ? true : t.payment_method === filterPaymentMethod;
+    return matchMonth && matchStudents && matchMethod;
   });
+
+  const totalFilteredRevenue = filteredTransactions.reduce((acc, t) => acc + Number(t.amount || 0), 0);
 
   if (!isAuthenticated) {
     return (
@@ -1077,6 +1053,9 @@ export default function App() {
             <div className="space-y-3">
               {filteredStudentsTab.map(st => {
                 const isActive = st.active ?? true;
+                const currentMonthRef = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+                const hasPaidCurrentMonth = transactions.some(t => t.student_id === st.id && t.reference_month === currentMonthRef);
+
                 return (
                   <div key={st.id} className={`p-4 bg-white rounded-2xl border shadow-sm space-y-3 ${!isActive ? 'opacity-60 bg-slate-50 border-slate-200' : 'border-slate-200'}`}>
                     <div className="flex justify-between items-start">
@@ -1092,18 +1071,17 @@ export default function App() {
                         </div>
                         <p className="text-xs text-slate-500 mt-1">{st.unit} • {st.whatsapp}</p>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-xs font-bold text-emerald-600">R$ {st.monthly_fee || 0}</span>
+                          <span className="text-xs font-bold text-emerald-600">Base: R$ {st.monthly_fee || 0}/mês</span>
                           <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded">
                             {st.preferred_payment || 'Pix'}
                           </span>
                         </div>
-                        <p className="text-[10px] text-slate-400 font-medium mt-1">Início Contrato: {st.start_date ? new Date(`${st.start_date}T00:00:00`).toLocaleDateString('pt-BR') : 'Não informado'}</p>
                       </div>
                       <button 
                         onClick={() => handleTogglePaymentStatusDirect(st)}
-                        className={`text-xs font-bold px-2.5 py-1 rounded-full border ${st.paymentpending ? 'bg-rose-100 text-rose-700 border-rose-300' : 'bg-emerald-100 text-emerald-700 border-emerald-300'}`}
+                        className={`text-xs font-bold px-2.5 py-1 rounded-full border ${!hasPaidCurrentMonth ? 'bg-rose-100 text-rose-700 border-rose-300' : 'bg-emerald-100 text-emerald-700 border-emerald-300'}`}
                       >
-                        {st.paymentpending ? 'Inadimplente (Dar Baixa)' : 'Em dia'}
+                        {!hasPaidCurrentMonth ? 'Pendente Mês Atual' : 'Em Dia (Quitado)'}
                       </button>
                     </div>
 
@@ -1146,134 +1124,165 @@ export default function App() {
           </div>
         )}
 
-        {/* --- ABA PAINEL FINANCEIRO INTELIGENTE --- */}
+        {/* --- ABA PAINEL FINANCEIRO AVANÇADO --- */}
         {activeTab === 'financeiro' && (
-          <div className="space-y-4 max-w-lg mx-auto">
+          <div className="space-y-4 max-w-2xl mx-auto">
             <div className="flex justify-between items-center">
-              <h2 className="text-xl font-bold text-slate-800">Painel Financeiro</h2>
+              <h2 className="text-xl font-bold text-slate-800">Painel Financeiro & Lançamentos</h2>
               <span className="text-xs font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-full">
                 {activeStudents.length} Alunos Ativos
               </span>
             </div>
 
-            <div className="bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm flex justify-between gap-1">
-              {[
-                { id: 'mensal', label: 'Mensal' },
-                { id: 'trimestral', label: 'Trimestral' },
-                { id: 'semestral', label: 'Semestral' },
-                { id: 'anual', label: 'Anual' }
-              ].map(p => (
-                <button 
-                  key={p.id}
-                  onClick={() => setFinancePeriod(p.id)}
-                  className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition ${financePeriod === p.id ? 'bg-indigo-600 text-white shadow' : 'text-slate-600 hover:bg-slate-100'}`}
-                >
-                  {p.label}
+            {/* FORMULÁRIO DE LANÇAMENTO DE PAGAMENTO MENSAL / MULTI-ALUNO */}
+            <div className="bg-white p-4 rounded-2xl border border-indigo-200 shadow-sm space-y-3">
+              <h3 className="text-sm font-bold text-indigo-900 border-b pb-2">➕ Lançar / Registrar Pagamento Manual</h3>
+              <form onSubmit={handleAddBatchTransactions} className="space-y-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    Selecione o(s) Aluno(s) <span className="text-slate-400 font-normal">(Segure Ctrl/Cmd para múltiplos)</span>
+                  </label>
+                  <select 
+                    multiple 
+                    required 
+                    value={manualPayStudents} 
+                    onChange={e => setManualPayStudents(Array.from(e.target.selectedOptions, option => option.value))}
+                    className="w-full p-2 border rounded-xl text-xs min-h-[90px] bg-slate-50"
+                  >
+                    {activeStudents.map(st => (
+                      <option key={st.id} value={st.id}>
+                        {st.name} (Base: R$ {st.monthly_fee || 0})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Mês Ref.</label>
+                    <input 
+                      required 
+                      type="month" 
+                      value={manualPayRefMonth} 
+                      onChange={e => setManualPayRefMonth(e.target.value)} 
+                      className="w-full p-2 border rounded-xl text-xs font-bold" 
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Valor Pago (R$)</label>
+                    <input 
+                      required 
+                      type="number" 
+                      step="0.01" 
+                      placeholder="Ex: 450" 
+                      value={manualPayAmount} 
+                      onChange={e => setManualPayAmount(e.target.value)} 
+                      className="w-full p-2 border rounded-xl text-xs font-bold text-emerald-700" 
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Método</label>
+                    <select 
+                      value={manualPayMethod} 
+                      onChange={e => setManualPayMethod(e.target.value)} 
+                      className="w-full p-2 border rounded-xl text-xs font-bold"
+                    >
+                      {FORMAS_PAGAMENTO.map(f => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {manualPayMethod === 'Misto / Dividido' && (
+                  <div>
+                    <input 
+                      type="text" 
+                      placeholder="Detalhamento da divisão (ex: R$ 200 Pix + R$ 200 Cartão)" 
+                      value={manualPayDetails} 
+                      onChange={e => setManualPayDetails(e.target.value)} 
+                      className="w-full p-2 border rounded-xl text-xs" 
+                    />
+                  </div>
+                )}
+
+                <button type="submit" className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow">
+                  ✓ Confirmar Lançamento do Pagamento
                 </button>
-              ))}
+              </form>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                <span className="text-[11px] text-slate-400 font-bold uppercase block mb-1">Faturamento Real ({financePeriod.toUpperCase()})</span>
-                <span className="text-xl font-extrabold text-slate-900">R$ {totalPeriodGross.toLocaleString('pt-BR')}</span>
-                <span className="text-[10px] text-slate-400 block mt-1">Calculado pelo tempo de contrato</span>
-              </div>
-
-              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                <span className="text-[11px] text-emerald-600 font-bold uppercase block mb-1">Recebido Quitado</span>
-                <span className="text-xl font-extrabold text-emerald-600">R$ {totalPaidPeriod.toLocaleString('pt-BR')}</span>
-                <span className="text-[10px] text-emerald-700/70 block mt-1">
-                  {((totalPaidPeriod / (totalPeriodGross || 1)) * 100).toFixed(0)}% do previsto
-                </span>
-              </div>
-
-              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                <span className="text-[11px] text-rose-500 font-bold uppercase block mb-1">Pendente / Inadimplência</span>
-                <span className="text-xl font-extrabold text-rose-600">R$ {totalPendingPeriod.toLocaleString('pt-BR')}</span>
-                <span className="text-[10px] text-rose-500 font-semibold block mt-1">
-                  Taxa: {defaultRate}%
-                </span>
-              </div>
-
-              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                <span className="text-[11px] text-indigo-600 font-bold uppercase block mb-1">Ticket Médio / Aluno</span>
-                <span className="text-xl font-extrabold text-indigo-600">R$ {avgTicket}</span>
-                <span className="text-[10px] text-slate-400 block mt-1">Mensal por contrato</span>
-              </div>
-            </div>
-
+            {/* SEÇÃO DE FILTROS DO HISTÓRICO */}
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Histórico de Recebimentos por Forma de Pagamento</h3>
-              <div className="grid grid-cols-2 gap-2">
-                {FORMAS_PAGAMENTO.map(method => (
-                  <div key={method} className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                    <span className="text-[10px] font-bold text-slate-400 block">{method}</span>
-                    <span className="text-sm font-bold text-slate-900">R$ {(paymentMethodTotals[method] || 0).toLocaleString('pt-BR')}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Divisão de Receita por Modalidade</h3>
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">🔍 Filtro Mês a Mês & Multi-Aluno</h3>
               
-              <div className="flex items-center justify-around py-2">
-                <div 
-                  className="w-24 h-24 rounded-full border-2 border-white shadow-inner flex items-center justify-center relative"
-                  style={{
-                    background: `conic-gradient(
-                      #4f46e5 0% ${modalityStats[0].percent}%, 
-                      #06b6d4 ${modalityStats[0].percent}% ${modalityStats[0].percent + modalityStats[1].percent}%, 
-                      #10b981 ${modalityStats[0].percent + modalityStats[1].percent}% 100%
-                    )`
-                  }}
-                >
-                  <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center font-bold text-[10px] text-slate-700">
-                    {periodMonths}M
-                  </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 block mb-0.5">Mês de Referência</label>
+                  <input 
+                    type="month" 
+                    value={filterRefMonth === 'Todos' ? '' : filterRefMonth} 
+                    onChange={e => setFilterRefMonth(e.target.value || 'Todos')} 
+                    className="w-full p-1.5 border rounded-lg text-xs font-bold" 
+                  />
+                  <button onClick={() => setFilterRefMonth('Todos')} className="text-[9px] text-indigo-600 underline font-semibold mt-0.5">Limpar Mês</button>
                 </div>
 
-                <div className="space-y-1.5 text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-indigo-600"></span>
-                    <span className="font-semibold text-slate-700">Consultoria:</span>
-                    <span className="font-bold text-slate-900">R$ {modalityStats[0].revenue} ({modalityStats[0].percent}%)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-cyan-500"></span>
-                    <span className="font-semibold text-slate-700">Híbrido:</span>
-                    <span className="font-bold text-slate-900">R$ {modalityStats[1].revenue} ({modalityStats[1].percent}%)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
-                    <span className="font-semibold text-slate-700">Presencial:</span>
-                    <span className="font-bold text-slate-900">R$ {modalityStats[2].revenue} ({modalityStats[2].percent}%)</span>
-                  </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 block mb-0.5">Forma de Pagamento</label>
+                  <select 
+                    value={filterPaymentMethod} 
+                    onChange={e => setFilterPaymentMethod(e.target.value)} 
+                    className="w-full p-1.5 border rounded-lg text-xs font-semibold"
+                  >
+                    <option value="Todos">Todas Formas</option>
+                    {FORMAS_PAGAMENTO.map(f => <option key={f} value={f}>{f}</option>)}
+                  </select>
                 </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 block mb-0.5">Alunos Selecionados</label>
+                  <select 
+                    multiple 
+                    value={filterSelectedStudents} 
+                    onChange={e => setFilterSelectedStudents(Array.from(e.target.selectedOptions, option => option.value))}
+                    className="w-full p-1 border rounded-lg text-[10px] max-h-16 bg-slate-50"
+                  >
+                    {students.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
+                  </select>
+                  {filterSelectedStudents.length > 0 && (
+                    <button onClick={() => setFilterSelectedStudents([])} className="text-[9px] text-rose-600 underline font-semibold block mt-0.5">Limpar Seleção</button>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-100 flex justify-between items-center">
+                <div>
+                  <span className="text-[10px] text-indigo-600 font-bold uppercase block">Total Quitado (Filtro Atual)</span>
+                  <span className="text-xl font-extrabold text-indigo-900">R$ {totalFilteredRevenue.toLocaleString('pt-BR')}</span>
+                </div>
+                <span className="text-xs font-bold text-slate-500">{filteredTransactions.length} Registro(s)</span>
               </div>
             </div>
 
+            {/* TABELA DE REGISTROS DE PAGAMENTO HISTÓRICO */}
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Ajuste de Valores dos Alunos</h3>
-              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                {activeStudents.map(st => (
-                  <div key={st.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-200">
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Histórico de Pagamentos Recebidos</h3>
+              
+              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                {filteredTransactions.map(tx => (
+                  <div key={tx.id} className="flex justify-between items-center p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
                     <div>
-                      <p className="text-xs font-bold text-slate-800">{st.name}</p>
-                      <p className="text-[10px] text-slate-400">Venc: Dia {st.due_day || 5} • {st.preferred_payment || 'Pix'}</p>
+                      <span className="font-bold text-slate-900 block">{tx.student_name}</span>
+                      <span className="text-[10px] text-slate-500 font-medium">Ref: <strong>{tx.reference_month}</strong> • {tx.payment_method}</span>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <span className="text-xs font-bold text-slate-600">R$</span>
-                      <input 
-                        type="number" 
-                        defaultValue={st.monthly_fee || 0}
-                        onBlur={(e) => handleUpdateStudentFee(st.id, e.target.value)}
-                        className="w-20 p-1 border rounded-lg text-xs font-bold text-right bg-white"
-                      />
+                    <div className="flex items-center gap-3">
+                      <span className="font-extrabold text-emerald-600 text-sm">R$ {Number(tx.amount || 0).toLocaleString('pt-BR')}</span>
+                      <button onClick={() => handleDeleteTransaction(tx.id)} className="text-rose-500 hover:text-rose-700 font-bold text-xs">🗑️</button>
                     </div>
                   </div>
                 ))}
+                {filteredTransactions.length === 0 && (
+                  <p className="text-center text-slate-400 py-6 text-xs">Nenhum pagamento registrado para os filtros selecionados.</p>
+                )}
               </div>
             </div>
 
@@ -1305,6 +1314,17 @@ export default function App() {
             <p className="text-xs text-slate-500">Registrar pagamento de <strong>{selectedStudentForPayment.name}</strong></p>
 
             <form onSubmit={handleSavePayment} className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Mês de Referência</label>
+                <input 
+                  required 
+                  type="month" 
+                  value={paymentForm.refMonth} 
+                  onChange={e => setPaymentForm({...paymentForm, refMonth: e.target.value})} 
+                  className="w-full p-2.5 border rounded-xl text-sm font-bold" 
+                />
+              </div>
+
               <div>
                 <label className="text-xs font-bold text-slate-700 block mb-1">Valor Pago (R$)</label>
                 <input 
