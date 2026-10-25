@@ -81,7 +81,7 @@ export default function App() {
 
   const [newStudent, setNewStudent] = useState({ 
     name: '', whatsapp: '', email: '', birthdate: '', gender: 'Feminino', modality: 'Presencial',
-    unit: '', packtotal: 4, monthly_fee: 0, fixed_schedule: {}, cycle_type: 'mês_vigente', due_day: 5,
+    unit: '', packtotal: 4, monthly_fee: 0, preferred_payment: 'Pix', fixed_schedule: {}, cycle_type: 'mês_vigente', due_day: 5,
     start_date: new Date().toISOString().split('T')[0]
   });
 
@@ -205,7 +205,7 @@ export default function App() {
   const handleOpenPaymentModal = (student) => {
     setSelectedStudentForPayment(student);
     setPaymentForm({
-      method: 'Pix',
+      method: student.preferred_payment || 'Pix',
       details: '',
       amount: student.monthly_fee || 0
     });
@@ -416,6 +416,7 @@ export default function App() {
         unit: student.unit || defaultUnit,
         packtotal: student.packtotal ?? 4,
         monthly_fee: student.monthly_fee ?? 0,
+        preferred_payment: student.preferred_payment || 'Pix',
         fixed_schedule: parsedSchedule,
         cycle_type: student.cycle_type || 'mês_vigente',
         due_day: student.due_day || 5,
@@ -425,7 +426,7 @@ export default function App() {
       setEditingStudentId(null);
       setNewStudent({ 
         name: '', whatsapp: '', email: '', birthdate: '', gender: 'Feminino', modality: 'Presencial',
-        unit: defaultUnit, packtotal: 4, monthly_fee: 0, fixed_schedule: {}, cycle_type: 'mês_vigente', due_day: 5,
+        unit: defaultUnit, packtotal: 4, monthly_fee: 0, preferred_payment: 'Pix', fixed_schedule: {}, cycle_type: 'mês_vigente', due_day: 5,
         start_date: formatDateYYYYMMDD(new Date())
       });
     }
@@ -536,12 +537,10 @@ export default function App() {
     fetchStudents();
   };
 
-  // REVERTER CHECK-IN (VOLTAR PARA PENDENTE E DESFAZER CONTAGEM)
   const handleResetToPending = async (schedule, studentId) => {
     const student = students.find(s => s.id === studentId);
     await supabase.from('schedules').update({ status: 'pending' }).eq('id', schedule.id);
     
-    // Se estava concluída, desconta 1 aula realizada do aluno
     if (schedule.status === 'completed' && student && (student.classesdone || 0) > 0) {
       await supabase.from('students').update({ classesdone: Math.max(0, student.classesdone - 1) }).eq('id', studentId);
     }
@@ -579,7 +578,6 @@ export default function App() {
     
     if (student) {
       const updates = { vouchers: (student.vouchers || 0) + 1 };
-      // Se estava concluída antes, subtrai a aula feita equivocadamente
       if (currentStatus === 'completed' && (student.classesdone || 0) > 0) {
         updates.classesdone = Math.max(0, student.classesdone - 1);
       }
@@ -889,7 +887,6 @@ export default function App() {
                           </div>
                         </div>
 
-                        {/* PAINEL DE AÇÕES DISPONÍVEL PARA QUALQUER STATUS (INCLUSIVE AULAS JÁ REALIZADAS) */}
                         <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
                           {s.status !== 'completed' ? (
                             <button onClick={() => handleCheckIn(s.id, s.studentid)} className="bg-emerald-600 text-white py-2 px-3 rounded-xl text-xs font-bold">
@@ -914,7 +911,6 @@ export default function App() {
                           </button>
                         </div>
 
-                        {/* BOTAO PARA EXCLUIR AGENDAMENTO INDEVIDO DO HISTORICO */}
                         <div className="text-right pt-1">
                           <button onClick={() => handleDeleteSchedule(s.id)} className="text-[10px] text-rose-500 hover:text-rose-700 font-semibold underline">
                             🗑️ Excluir Agendamento
@@ -1095,14 +1091,19 @@ export default function App() {
                           )}
                         </div>
                         <p className="text-xs text-slate-500 mt-1">{st.unit} • {st.whatsapp}</p>
-                        <p className="text-xs font-bold text-emerald-600 mt-0.5">Mensalidade: R$ {st.monthly_fee || 0}</p>
-                        <p className="text-[10px] text-slate-400 font-medium">Início Contrato: {st.start_date ? new Date(`${st.start_date}T00:00:00`).toLocaleDateString('pt-BR') : 'Não informado'}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-xs font-bold text-emerald-600">R$ {st.monthly_fee || 0}</span>
+                          <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded">
+                            {st.preferred_payment || 'Pix'}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-medium mt-1">Início Contrato: {st.start_date ? new Date(`${st.start_date}T00:00:00`).toLocaleDateString('pt-BR') : 'Não informado'}</p>
                       </div>
                       <button 
                         onClick={() => handleTogglePaymentStatusDirect(st)}
                         className={`text-xs font-bold px-2.5 py-1 rounded-full border ${st.paymentpending ? 'bg-rose-100 text-rose-700 border-rose-300' : 'bg-emerald-100 text-emerald-700 border-emerald-300'}`}
                       >
-                        {st.paymentpending ? 'Inadimplente' : 'Em dia'}
+                        {st.paymentpending ? 'Inadimplente (Dar Baixa)' : 'Em dia'}
                       </button>
                     </div>
 
@@ -1260,7 +1261,7 @@ export default function App() {
                   <div key={st.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-200">
                     <div>
                       <p className="text-xs font-bold text-slate-800">{st.name}</p>
-                      <p className="text-[10px] text-slate-400">Vencimento: Dia {st.due_day || 5} • {st.modality || 'Presencial'}</p>
+                      <p className="text-[10px] text-slate-400">Venc: Dia {st.due_day || 5} • {st.preferred_payment || 'Pix'}</p>
                     </div>
                     <div className="flex items-center gap-1">
                       <span className="text-xs font-bold text-slate-600">R$</span>
@@ -1317,7 +1318,7 @@ export default function App() {
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Forma de Pagamento</label>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Forma de Pagamento Utilizada</label>
                 <select 
                   value={paymentForm.method} 
                   onChange={e => setPaymentForm({...paymentForm, method: e.target.value})} 
@@ -1509,6 +1510,17 @@ export default function App() {
                   <label className="text-xs font-bold text-slate-700 block mb-1">Valor Mensal (R$)</label>
                   <input required type="number" step="0.01" placeholder="Ex: 500" value={newStudent.monthly_fee} onChange={e => setNewStudent({...newStudent, monthly_fee: e.target.value})} className="w-full p-2.5 border rounded-xl text-sm font-bold text-emerald-700" />
                 </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Forma de Pagamento Preferencial</label>
+                <select 
+                  value={newStudent.preferred_payment} 
+                  onChange={e => setNewStudent({...newStudent, preferred_payment: e.target.value})} 
+                  className="w-full p-2.5 border rounded-xl text-sm font-bold"
+                >
+                  {FORMAS_PAGAMENTO.map(f => <option key={f} value={f}>{f}</option>)}
+                </select>
               </div>
 
               <div>
