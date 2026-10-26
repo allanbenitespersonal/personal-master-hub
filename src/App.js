@@ -58,11 +58,18 @@ const DATAS_MARKETING_INICIAL = [
 ];
 
 export default function App() {
+  // AUTENTICAÇÃO E PERFIS
+  const [currentUser, setCurrentUser] = useState(null);
+  const [userRole, setUserRole] = useState('super_admin'); // 'super_admin' (Allan) | 'moderator' (Cris) | 'student'
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+
   const [activeTab, setActiveTab] = useState('resumo');
   const [students, setStudents] = useState([]);
   const [schedules, setSchedules] = useState([]);
   const [units, setUnits] = useState([]);
   const [transactions, setTransactions] = useState([]);
+  const [pendingApprovals, setPendingApprovals] = useState([]);
   const [pixKey, setPixKey] = useState(localStorage.getItem('pix_key') || '');
 
   // Efeito Lanterna
@@ -224,6 +231,7 @@ export default function App() {
     fetchSchedules();
     fetchUnits();
     fetchTransactions();
+    fetchPendingApprovals();
   }, []);
 
   const fetchUnits = async () => {
@@ -258,6 +266,62 @@ export default function App() {
     const { data, error } = await supabase.from('transactions').select('*');
     if (error) console.error(error);
     if (data) setTransactions(data);
+  };
+
+  const fetchPendingApprovals = async () => {
+    const { data } = await supabase.from('pending_approvals').select('*').eq('status', 'pending');
+    if (data) setPendingApprovals(data);
+  };
+
+  // AUTENTICAÇÃO
+  const handleLogin = (e) => {
+    e.preventDefault();
+    if (loginEmail.toLowerCase().includes('cris') || loginEmail.toLowerCase().includes('moderador')) {
+      setUserRole('moderator');
+      setCurrentUser({ email: loginEmail, name: 'Cristina Mello (Moderadora)' });
+    } else {
+      setUserRole('super_admin');
+      setCurrentUser({ email: loginEmail || 'allan@masterhub.com', name: 'Allan Benites (Super Admin)' });
+    }
+  };
+
+  // FLUXO DE APROVAÇÃO
+  const handleCreatePendingAction = async (actionType, payloadDescription, payloadData) => {
+    const newApproval = {
+      author_email: currentUser?.email || 'moderador@masterhub.com',
+      action_type: actionType,
+      payload: { description: payloadDescription, data: payloadData },
+      status: 'pending'
+    };
+
+    const { error } = await supabase.from('pending_approvals').insert([newApproval]);
+    if (!error) {
+      alert(`Ação registrada! Como você está acessando como Moderadora, a alteração foi enviada para aprovação do Allan em até 24h.`);
+      fetchPendingApprovals();
+    } else {
+      alert('Erro ao registrar pendência: ' + error.message);
+    }
+  };
+
+  const handleApproveAction = async (approval) => {
+    const { action_type, payload } = approval;
+
+    if (action_type === 'Lançamento de Pagamento') {
+      await supabase.from('transactions').insert([payload.data]);
+      await supabase.from('students').update({ paymentpending: false }).eq('id', payload.data.student_id);
+    }
+
+    await supabase.from('pending_approvals').update({ status: 'approved' }).eq('id', approval.id);
+    alert('Ação APROVADA com sucesso!');
+    fetchPendingApprovals();
+    fetchTransactions();
+    fetchStudents();
+  };
+
+  const handleRejectAction = async (approvalId) => {
+    await supabase.from('pending_approvals').update({ status: 'rejected' }).eq('id', approvalId);
+    alert('Ação recusada e removida da fila.');
+    fetchPendingApprovals();
   };
 
   // VERIFICADOR DE ALERTA INDIVIDUAL DO ALUNO
@@ -322,6 +386,16 @@ export default function App() {
       reference_month: paymentForm.refMonth
     };
 
+    if (userRole === 'moderator') {
+      await handleCreatePendingAction(
+        'Lançamento de Pagamento',
+        `Pagamento de R$ ${paymentForm.amount} para ${selectedStudentForPayment.name} (Ref: ${paymentForm.refMonth})`,
+        transactionObj
+      );
+      setShowPaymentModal(false);
+      return;
+    }
+
     const { error: txError } = await supabase.from('transactions').insert([transactionObj]);
     if (txError) {
       alert('Erro ao registrar transação: ' + txError.message);
@@ -362,6 +436,18 @@ export default function App() {
         reference_month: manualPayRefMonth
       };
     });
+
+    if (userRole === 'moderator') {
+      await handleCreatePendingAction(
+        'Lançamento de Pagamento em Lote',
+        `Lançamento de R$ ${manualPayAmount} para ${newTxs.length} aluno(s) (Ref: ${manualPayRefMonth})`,
+        newTxs
+      );
+      setManualPayStudents([]);
+      setManualPayAmount('');
+      setManualPayDetails('');
+      return;
+    }
 
     const { error } = await supabase.from('transactions').insert(newTxs);
     if (error) {
@@ -844,7 +930,6 @@ export default function App() {
   const currentMonthTransactions = transactions.filter(t => t.reference_month === currentMonthRefStr);
   const currentMonthRevenue = currentMonthTransactions.reduce((acc, t) => acc + Number(t.amount || 0), 0);
 
-  // NOTIFICAÇÕES E LEMBRETES ATIVOS PARA O WIDGET
   const activeNotifications = notifications.filter(n => !n.completed);
 
   // NAVEGAÇÕES DOS WIDGETS
@@ -896,9 +981,55 @@ export default function App() {
     return days;
   };
 
+  // TELA DE LOGIN UNIFICADA
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-[#070a12] text-white flex flex-col items-center justify-center p-6 relative overflow-hidden">
+        <div 
+          className="pointer-events-none fixed inset-0 z-0 transition-opacity duration-300"
+          style={{
+            background: `radial-gradient(600px circle at ${mousePos.x}px ${mousePos.y}px, rgba(59, 130, 246, 0.15), transparent 80%)`
+          }}
+        />
+        <div className="w-full max-w-sm bg-[#0e1422]/90 backdrop-blur-md p-8 rounded-3xl shadow-2xl border border-slate-800/80 text-center relative z-10">
+          <div className="bg-gradient-to-tr from-blue-600 to-indigo-500 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl font-bold shadow-lg shadow-blue-500/30">
+            ⚡
+          </div>
+          <h1 className="text-2xl font-black mb-1 bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">Personal Master Hub</h1>
+          <p className="text-slate-400 text-xs mb-6 font-medium">Acesso Unificado • Admin & Alunos</p>
+          
+          <form onSubmit={handleLogin} className="space-y-3">
+            <input 
+              type="email" 
+              placeholder="Digite seu E-mail" 
+              value={loginEmail}
+              onChange={(e) => setLoginEmail(e.target.value)}
+              className="w-full px-4 py-3 bg-[#080b13] border border-slate-800 rounded-2xl text-sm text-white focus:outline-none focus:border-blue-500 transition"
+            />
+            <input 
+              type="password" 
+              placeholder="Digite sua Senha" 
+              value={loginPassword}
+              onChange={(e) => setLoginPassword(e.target.value)}
+              className="w-full px-4 py-3 bg-[#080b13] border border-slate-800 rounded-2xl text-sm text-white focus:outline-none focus:border-blue-500 transition"
+            />
+            <button type="submit" className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 rounded-2xl font-bold shadow-lg shadow-blue-600/30 transition text-sm">
+              Entrar no Painel
+            </button>
+          </form>
+
+          <div className="mt-4 pt-4 border-t border-slate-800/80 text-[11px] text-slate-500">
+            <p>Dica de teste:</p>
+            <p>Digite qualquer e-mail com <strong>cris</strong> para modo Moderadora.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#070a12] text-slate-100 pb-24 font-sans relative overflow-x-hidden selection:bg-blue-600 selection:text-white">
-      {/* EFEITO LANTERNA SPOTLIGHT */}
+      {/* EFEITO LANTERNA */}
       <div 
         className="pointer-events-none fixed inset-0 z-0 transition-opacity duration-300"
         style={{
@@ -914,25 +1045,75 @@ export default function App() {
           </div>
           <div>
             <h1 className="text-sm font-bold leading-tight">Personal Master Hub</h1>
-            <p className="text-[10px] font-semibold text-blue-400 uppercase tracking-wider">Gestão & Performance</p>
+            <p className="text-[10px] font-semibold text-blue-400 uppercase tracking-wider">
+              {userRole === 'super_admin' ? '👑 Super Admin' : '🛡️ Moderador (Cris)'}
+            </p>
           </div>
         </div>
-        <button 
-          onClick={() => setShowNotificationModal(true)} 
-          className="text-xs bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded-xl shadow-lg shadow-blue-600/30 transition flex items-center gap-1"
-        >
-          🔔 + Criar Lembrete
-        </button>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => setShowNotificationModal(true)} 
+            className="text-xs bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded-xl shadow-lg shadow-blue-600/30 transition flex items-center gap-1"
+          >
+            🔔 + Criar Lembrete
+          </button>
+          <button 
+            onClick={() => setCurrentUser(null)} 
+            className="text-xs bg-slate-900/80 hover:bg-slate-800 text-slate-300 px-3 py-1.5 rounded-xl border border-slate-800 transition font-medium"
+          >
+            Sair
+          </button>
+        </div>
       </header>
 
       <main className="p-4 max-w-5xl mx-auto space-y-5 relative z-10">
 
-        {/* --- ABA 1: RESUMO / DASHBOARD --- */}
+        {/* ALERTA / CENTRAL DE APROVAÇÕES PENDENTES (SUPER ADMIN) */}
+        {userRole === 'super_admin' && pendingApprovals.length > 0 && (
+          <div className="bg-amber-950/40 border border-amber-600/60 p-4 rounded-3xl shadow-xl space-y-3">
+            <div className="flex justify-between items-center border-b border-amber-800/50 pb-2">
+              <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-2">
+                <span>📩</span> Central de Moderação (Alterações da Cris para Aprovar)
+              </h3>
+              <span className="text-[10px] font-black bg-amber-500 text-black px-2 py-0.5 rounded-full">
+                {pendingApprovals.length} Pendente(s)
+              </span>
+            </div>
+
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {pendingApprovals.map(appr => (
+                <div key={appr.id} className="p-3 bg-[#080c16] rounded-2xl border border-slate-800 flex justify-between items-center text-xs">
+                  <div>
+                    <span className="font-bold text-white block">{appr.action_type}</span>
+                    <span className="text-slate-400 text-[11px]">{appr.payload?.description}</span>
+                    <span className="text-[9px] text-slate-500 block mt-0.5">Enviado por: {appr.author_email}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => handleApproveAction(appr)}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-xl text-xs shadow transition"
+                    >
+                      ✓ Aceitar
+                    </button>
+                    <button 
+                      onClick={() => handleRejectAction(appr.id)}
+                      className="bg-rose-950 text-rose-400 border border-rose-800/50 hover:bg-rose-900 font-bold px-2.5 py-1.5 rounded-xl text-xs transition"
+                    >
+                      ✕ Recusar
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ABA RESUMO */}
         {activeTab === 'resumo' && (
           <div className="space-y-5">
             <div className="flex justify-between items-center">
               <div>
-                <h2 className="text-2xl font-black text-white tracking-tight">Olá, Allan 👋</h2>
+                <h2 className="text-2xl font-black text-white tracking-tight">Olá, {currentUser.name.split(' ')[0]} 👋</h2>
                 <p className="text-xs text-slate-400 font-medium">Aqui está o panorama geral do seu consultório e agenda hoje.</p>
               </div>
               <span className="text-[10px] font-bold text-blue-400 bg-blue-950/60 border border-blue-800/50 px-3 py-1.5 rounded-full uppercase tracking-wider shadow-inner">
@@ -991,11 +1172,11 @@ export default function App() {
               </div>
             </div>
 
-            {/* SEÇÃO CENTRAL DE WIDGETS + NOTIFICAÇÕES & LEMBRETES */}
+            {/* SEÇÃO CENTRAL DE WIDGETS */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               
               <div className="md:col-span-2 space-y-4">
-                {/* WIDGET: CENTRAL DE NOTIFICAÇÕES & LEMBRETES */}
+                {/* WIDGET: CENTRAL DE NOTIFICAÇÕES */}
                 <div className="bg-[#0e1422]/90 backdrop-blur-md p-5 rounded-3xl border border-blue-800/50 shadow-xl space-y-3">
                   <div className="flex justify-between items-center border-b border-slate-800/80 pb-3">
                     <div className="flex items-center gap-2">
@@ -1166,7 +1347,7 @@ export default function App() {
           </div>
         )}
 
-        {/* --- ABA 2: AGENDA MASTER --- */}
+        {/* AGENDA MASTER */}
         {activeTab === 'agenda' && (
           <div className="space-y-4">
             <div className="flex justify-between items-center gap-2">
@@ -1420,7 +1601,7 @@ export default function App() {
           </div>
         )}
 
-        {/* --- ABA 3: ALUNOS & ANIVERSARIANTES --- */}
+        {/* ALUNOS & ANIVERSARIANTES */}
         {activeTab === 'alunos' && (
           <div className="space-y-4 max-w-2xl mx-auto">
             <div className="flex justify-between items-center">
@@ -1576,7 +1757,7 @@ export default function App() {
           </div>
         )}
 
-        {/* --- ABA 4: PAINEL FINANCEIRO AVANÇADO --- */}
+        {/* PAINEL FINANCEIRO */}
         {activeTab === 'financeiro' && (
           <div className="space-y-4 max-w-2xl mx-auto">
             <div className="flex justify-between items-center">
@@ -1754,7 +1935,7 @@ export default function App() {
           </div>
         )}
 
-        {/* --- ABA 5: PROSPECÇÃO & MARKETING --- */}
+        {/* PROSPECÇÃO & MARKETING */}
         {activeTab === 'marketing' && (
           <div className="space-y-4 max-w-2xl mx-auto">
             <div className="flex justify-between items-center">
@@ -1826,7 +2007,7 @@ export default function App() {
 
       </main>
 
-      {/* --- MODAL DE CRIAR NOTIFICAÇÃO / LEMBRETE --- */}
+      {/* MODAL DE NOTIFICAÇÕES */}
       {showNotificationModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-[#0e1422] rounded-3xl p-5 w-full max-w-sm space-y-4 border border-slate-800 shadow-2xl">
@@ -1908,7 +2089,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAIS DE SISTEMA MANTIDOS */}
+      {/* MODAL PAGAMENTO */}
       {showPaymentModal && selectedStudentForPayment && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-[#0e1422] rounded-3xl p-5 w-full max-w-sm space-y-4 border border-slate-800 shadow-2xl">
@@ -1949,6 +2130,7 @@ export default function App() {
         </div>
       )}
 
+      {/* MODAL AULAS EM LOTE */}
       {showBatchModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-[#0e1422] rounded-3xl p-5 w-full max-w-sm space-y-4 border border-slate-800 shadow-2xl">
@@ -1996,6 +2178,7 @@ export default function App() {
         </div>
       )}
 
+      {/* MODAL UNIDADES */}
       {showUnitsModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-[#0e1422] rounded-3xl p-5 w-full max-w-sm space-y-4 max-h-[90vh] overflow-y-auto border border-slate-800 shadow-2xl">
@@ -2028,6 +2211,7 @@ export default function App() {
         </div>
       )}
 
+      {/* MODAL CADASTRAR/EDITAR ALUNO */}
       {showStudentModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-[#0e1422] rounded-3xl p-5 w-full max-w-sm space-y-4 max-h-[90vh] overflow-y-auto border border-slate-800 shadow-2xl">
@@ -2176,6 +2360,7 @@ export default function App() {
         </div>
       )}
 
+      {/* MODAL AGENDAMENTO */}
       {showScheduleModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-[#0e1422] rounded-3xl p-5 w-full max-w-sm space-y-4 border border-slate-800 shadow-2xl">
@@ -2199,6 +2384,7 @@ export default function App() {
         </div>
       )}
 
+      {/* MODAL REAGENDAMENTO */}
       {showRescheduleModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-[#0e1422] rounded-3xl p-5 w-full max-w-sm space-y-4 border border-slate-800 shadow-2xl">
