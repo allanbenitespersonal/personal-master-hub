@@ -39,14 +39,14 @@ const DATAS_MARKETING_INICIAL = [
   { id: '17-02', data: 'Fev/Mar', nome: 'Carnaval (Ponto Facultativo)', tipo: 'Nacional', publico: 'Geral', ideia: 'Desafio "Detox de Carnaval" para secar e recuperar o ritmo.' },
   { id: '08-03', data: '08/03', nome: 'Dia Internacional da Mulher', tipo: 'Promocional', publico: 'Feminino', ideia: 'Desconto de 20% no 1º mês para alunas novas ou voucher presente.' },
   { id: '15-03', data: '15/03', nome: 'Dia do Consumidor', tipo: 'Promocional', publico: 'Geral', ideia: 'Oferta relâmpago de taxa zero de avaliação física.' },
-  { data: 'Mar/Abr', id: 'sexta-santa', nome: 'Sexta-Feira Santa (Feriado Nacional)', tipo: 'Feriado Nacional', publico: 'Geral', ideia: 'Treino especial pré-feriado prolongado.' },
+  { id: 'sexta-santa', data: 'Mar/Abr', nome: 'Sexta-Feira Santa (Feriado Nacional)', tipo: 'Feriado Nacional', publico: 'Geral', ideia: 'Treino especial pré-feriado prolongado.' },
   { id: '21-04', data: '21/04', nome: 'Tiradentes (Feriado Nacional)', tipo: 'Feriado Nacional', publico: 'Geral', ideia: 'Combo Treino + Consultoria com preço promocional.' },
   { id: '01-05', data: '01/05', nome: 'Dia do Trabalho (Feriado Nacional)', tipo: 'Feriado Nacional', publico: 'Trabalhadores', ideia: 'Campanha "Invista na sua Saúde": Condições para profissionais corporativos.' },
   { id: '10-05', data: '2º Dom/Mai', nome: 'Dia das Mães', tipo: 'Promocional', publico: 'Mães / Filhos', ideia: 'Plano em dupla Mãe & Filho(a) com isenção da primeira mensalidade.' },
   { id: '12-06', data: '12/06', nome: 'Dia dos Namorados', tipo: 'Promocional', publico: 'Casais', ideia: 'Treino em Dupla: Pague 1 e treinem 2 durante o mês de Junho.' },
   { id: '09-08', data: '2º Dom/Ago', nome: 'Dia dos Pais', tipo: 'Promocional', publico: 'Pais', ideia: 'Campanha "Pai Ativo" - Kit Personal + Consultoria.' },
   { id: '01-09', data: '01/09', nome: 'Dia do Ed. Físico / Personal', tipo: 'Especial', publico: 'Geral', ideia: 'Semana do Personal: Avaliação biomecânica gratuita para indicações.' },
-  { id: '07-09', data: '07/09', nome: 'Independência do Brasil (Feriado)', tipo: 'Feriado Nacional', publico: 'Geral', ideia: 'Desafio 30 Dias de Independência da Sedentarismo.' },
+  { id: '07-09', data: '07/09', nome: 'Independência do Brasil (Feriado)', tipo: 'Feriado Nacional', publico: 'Geral', ideia: 'Desafio 30 Dias de Independência do Sedentarismo.' },
   { id: '20-09', data: '20/09', nome: 'Revolução Farroupilha (Feriado RS)', tipo: 'Feriado Regional', publico: 'Rio Grande do Sul', ideia: 'Campanha "Força Gaúcha": Desconto em planos presenciais.' },
   { id: '12-10', data: '12/10', nome: 'Nossa Sra. Aparecida (Feriado)', tipo: 'Feriado Nacional', publico: 'Geral', ideia: 'Ação para pais e mães com rotina corrida.' },
   { id: '28-10', data: '28/10', nome: 'Dia do Servidor Público', tipo: 'Promocional', publico: 'Funcionalismo', ideia: 'Desconto exclusivo permanente para funcionários públicos.' },
@@ -58,8 +58,6 @@ const DATAS_MARKETING_INICIAL = [
 ];
 
 export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [passwordInput, setPasswordInput] = useState('');
   const [activeTab, setActiveTab] = useState('resumo');
   const [students, setStudents] = useState([]);
   const [schedules, setSchedules] = useState([]);
@@ -77,6 +75,64 @@ export default function App() {
     window.addEventListener('mousemove', handleMouseMove);
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
+
+  // SISTEMA DE LEMBRETES & NOTIFICAÇÕES (PERSISTENTE NO LOCALSTORAGE)
+  const [notifications, setNotifications] = useState(() => {
+    const saved = localStorage.getItem('hub_custom_notifications');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
+  const [newNotice, setNewNotice] = useState({
+    title: '',
+    description: '',
+    student_id: '',
+    date: new Date().toISOString().split('T')[0],
+    time: '09:00',
+    is_full_day: false,
+    expiry_date: ''
+  });
+
+  const saveNotification = (e) => {
+    e.preventDefault();
+    if (!newNotice.title.trim()) return;
+
+    const created = {
+      id: Date.now().toString(),
+      ...newNotice,
+      completed: false
+    };
+
+    const updated = [created, ...notifications];
+    setNotifications(updated);
+    localStorage.setItem('hub_custom_notifications', JSON.stringify(updated));
+
+    setNewNotice({
+      title: '',
+      description: '',
+      student_id: '',
+      date: new Date().toISOString().split('T')[0],
+      time: '09:00',
+      is_full_day: false,
+      expiry_date: ''
+    });
+    setShowNotificationModal(false);
+    alert('Notificação/Lembrete criado com sucesso!');
+  };
+
+  const toggleNotificationComplete = (id) => {
+    const updated = notifications.map(n => n.id === id ? { ...n, completed: !n.completed } : n);
+    setNotifications(updated);
+    localStorage.setItem('hub_custom_notifications', JSON.stringify(updated));
+  };
+
+  const deleteNotification = (id) => {
+    if (window.confirm('Excluir esta notificação definitivamente?')) {
+      const updated = notifications.filter(n => n.id !== id);
+      setNotifications(updated);
+      localStorage.setItem('hub_custom_notifications', JSON.stringify(updated));
+    }
+  };
 
   // ESTADOS DE MARKETING & CAMPANHAS
   const [campaignData, setCampaignData] = useState(() => {
@@ -157,7 +213,7 @@ export default function App() {
   const [newStudent, setNewStudent] = useState({ 
     name: '', whatsapp: '', email: '', birthdate: '', gender: 'Feminino', modality: 'Presencial',
     unit: '', packtotal: 4, monthly_fee: 0, preferred_payment: 'Pix', fixed_schedule: {}, cycle_type: 'mês_vigente', due_day: 5,
-    start_date: new Date().toISOString().split('T')[0]
+    start_date: new Date().toISOString().split('T')[0], student_alert: ''
   });
 
   const [newSchedule, setNewSchedule] = useState({ studentid: '', date: new Date().toISOString().split('T')[0], time: '08:00', unit: '' });
@@ -204,12 +260,11 @@ export default function App() {
     if (data) setTransactions(data);
   };
 
-  const handleLogin = (e) => {
-    e.preventDefault();
-    if (passwordInput === '1234') {
-      setIsAuthenticated(true);
-    } else {
-      alert('Senha incorreta! (Dica: 1234)');
+  // VERIFICADOR DE ALERTA INDIVIDUAL DO ALUNO
+  const checkAndShowStudentAlert = (studentId) => {
+    const st = students.find(s => s.id === studentId);
+    if (st && st.student_alert && st.student_alert.trim() !== '') {
+      alert(`🚨 ALERTA DO ALUNO (${st.name.toUpperCase()}):\n\n"${st.student_alert}"`);
     }
   };
 
@@ -457,7 +512,6 @@ export default function App() {
     return matchStudent && matchUnit && matchTurn;
   });
 
-  // --- LÓGICA DE FILTRAGEM E ORDENAÇÃO POR MÊS DE ANIVERSÁRIO ---
   const filteredStudentsTab = students.filter(st => {
     const isActive = st.active ?? true;
     const matchText = !searchStudentTab.trim() || 
@@ -477,7 +531,6 @@ export default function App() {
 
     return matchText && matchStatus && matchModality && matchBirthday;
   }).sort((a, b) => {
-    // Se o filtro de aniversário estiver ativo como "Ano Inteiro", ordena mês a mês
     if (filterBirthdayMonthTab === 'Todos' && (a.birthdate || b.birthdate)) {
       const monthA = a.birthdate ? parseInt(a.birthdate.split('-')[1], 10) : 99;
       const monthB = b.birthdate ? parseInt(b.birthdate.split('-')[1], 10) : 99;
@@ -487,7 +540,6 @@ export default function App() {
       const dayB = b.birthdate ? parseInt(b.birthdate.split('-')[2], 10) : 99;
       return dayA - dayB;
     }
-    // Ordenação padrão alfabética
     return a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' });
   });
 
@@ -522,14 +574,15 @@ export default function App() {
         fixed_schedule: parsedSchedule,
         cycle_type: student.cycle_type || 'mês_vigente',
         due_day: student.due_day || 5,
-        start_date: student.start_date || formatDateYYYYMMDD(new Date())
+        start_date: student.start_date || formatDateYYYYMMDD(new Date()),
+        student_alert: student.student_alert || ''
       });
     } else {
       setEditingStudentId(null);
       setNewStudent({ 
         name: '', whatsapp: '', email: '', birthdate: '', gender: 'Feminino', modality: 'Presencial',
         unit: defaultUnit, packtotal: 4, monthly_fee: 0, preferred_payment: 'Pix', fixed_schedule: {}, cycle_type: 'mês_vigente', due_day: 5,
-        start_date: formatDateYYYYMMDD(new Date())
+        start_date: formatDateYYYYMMDD(new Date()), student_alert: ''
       });
     }
     setShowStudentModal(true);
@@ -602,6 +655,8 @@ export default function App() {
 
   const handleAddSchedule = async (e) => {
     e.preventDefault();
+    checkAndShowStudentAlert(newSchedule.studentid);
+
     const student = students.find(s => s.id === newSchedule.studentid);
     const isbonus = student ? (student.packtotal === 4 && student.classesdone >= 4) : false;
 
@@ -624,6 +679,8 @@ export default function App() {
   };
 
   const handleCheckIn = async (scheduleId, studentId) => {
+    checkAndShowStudentAlert(studentId);
+
     const student = students.find(s => s.id === studentId);
     await supabase.from('schedules').update({ status: 'completed' }).eq('id', scheduleId);
     if (student) {
@@ -634,6 +691,8 @@ export default function App() {
   };
 
   const handleResetToPending = async (schedule, studentId) => {
+    checkAndShowStudentAlert(studentId);
+
     const student = students.find(s => s.id === studentId);
     await supabase.from('schedules').update({ status: 'pending' }).eq('id', schedule.id);
     
@@ -645,6 +704,7 @@ export default function App() {
   };
 
   const handleOpenReschedule = (schedule) => {
+    checkAndShowStudentAlert(schedule.studentid);
     setSelectedSchedule(schedule);
     setRescheduleData({ date: schedule.date, time: schedule.time });
     setShowRescheduleModal(true);
@@ -665,6 +725,8 @@ export default function App() {
   };
 
   const handleRescheduleLater = async (scheduleId, studentId, currentStatus) => {
+    checkAndShowStudentAlert(studentId);
+
     const student = students.find(s => s.id === studentId);
     const now = new Date();
     const expiry = new Date(now.getFullYear(), now.getMonth() + 2, 0);
@@ -687,6 +749,8 @@ export default function App() {
   };
 
   const handleNoShow = async (scheduleId, studentId, currentStatus) => {
+    checkAndShowStudentAlert(studentId);
+
     const student = students.find(s => s.id === studentId);
     await supabase.from('schedules').update({ status: 'no-show' }).eq('id', scheduleId);
     
@@ -780,6 +844,9 @@ export default function App() {
   const currentMonthTransactions = transactions.filter(t => t.reference_month === currentMonthRefStr);
   const currentMonthRevenue = currentMonthTransactions.reduce((acc, t) => acc + Number(t.amount || 0), 0);
 
+  // NOTIFICAÇÕES E LEMBRETES ATIVOS PARA O WIDGET
+  const activeNotifications = notifications.filter(n => !n.completed);
+
   // NAVEGAÇÕES DOS WIDGETS
   const goToActiveStudents = () => {
     setFilterStatusTab('Ativos');
@@ -812,38 +879,6 @@ export default function App() {
 
   const totalFilteredRevenue = filteredTransactions.reduce((acc, t) => acc + Number(t.amount || 0), 0);
 
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-[#070a12] text-white flex flex-col items-center justify-center p-6 relative overflow-hidden">
-        <div 
-          className="pointer-events-none fixed inset-0 z-0 transition-opacity duration-300"
-          style={{
-            background: `radial-gradient(600px circle at ${mousePos.x}px ${mousePos.y}px, rgba(59, 130, 246, 0.15), transparent 80%)`
-          }}
-        />
-        <div className="w-full max-w-sm bg-[#0e1422]/90 backdrop-blur-md p-8 rounded-3xl shadow-2xl border border-slate-800/80 text-center relative z-10">
-          <div className="bg-gradient-to-tr from-blue-600 to-indigo-500 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl font-bold shadow-lg shadow-blue-500/30">
-            ⚡
-          </div>
-          <h1 className="text-2xl font-black mb-1 bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">Personal Master Hub</h1>
-          <p className="text-slate-400 text-xs mb-6 font-medium">Gestão Inteligente & Agenda</p>
-          <form onSubmit={handleLogin} className="space-y-4">
-            <input 
-              type="password" 
-              placeholder="Digite sua senha" 
-              value={passwordInput}
-              onChange={(e) => setPasswordInput(e.target.value)}
-              className="w-full px-4 py-3 bg-[#080b13] border border-slate-800 rounded-2xl text-center text-lg text-white focus:outline-none focus:border-blue-500 transition shadow-inner"
-            />
-            <button type="submit" className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 rounded-2xl font-bold shadow-lg shadow-blue-600/30 transition text-sm">
-              Entrar no Painel
-            </button>
-          </form>
-        </div>
-      </div>
-    );
-  }
-
   const getDaysInMonthGrid = (date) => {
     const year = date.getFullYear();
     const month = date.getMonth();
@@ -863,7 +898,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#070a12] text-slate-100 pb-24 font-sans relative overflow-x-hidden selection:bg-blue-600 selection:text-white">
-      {/* EFEITO LANTERNA */}
+      {/* EFEITO LANTERNA SPOTLIGHT */}
       <div 
         className="pointer-events-none fixed inset-0 z-0 transition-opacity duration-300"
         style={{
@@ -883,10 +918,10 @@ export default function App() {
           </div>
         </div>
         <button 
-          onClick={() => setIsAuthenticated(false)} 
-          className="text-xs bg-slate-900/80 hover:bg-slate-800 text-slate-300 px-3.5 py-1.5 rounded-xl border border-slate-800 transition font-medium"
+          onClick={() => setShowNotificationModal(true)} 
+          className="text-xs bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded-xl shadow-lg shadow-blue-600/30 transition flex items-center gap-1"
         >
-          Sair
+          🔔 + Criar Lembrete
         </button>
       </header>
 
@@ -956,52 +991,115 @@ export default function App() {
               </div>
             </div>
 
-            {/* SEÇÃO CENTRAL DE WIDGETS */}
+            {/* SEÇÃO CENTRAL DE WIDGETS + NOTIFICAÇÕES & LEMBRETES */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               
-              <div className="md:col-span-2 bg-[#0e1422]/80 backdrop-blur-md p-5 rounded-3xl border border-slate-800/80 shadow-xl space-y-4">
-                <div className="flex justify-between items-center border-b border-slate-800/80 pb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping"></span>
-                    <h3 className="text-sm font-bold text-white tracking-wide">Agenda de Hoje</h3>
+              <div className="md:col-span-2 space-y-4">
+                {/* WIDGET: CENTRAL DE NOTIFICAÇÕES & LEMBRETES */}
+                <div className="bg-[#0e1422]/90 backdrop-blur-md p-5 rounded-3xl border border-blue-800/50 shadow-xl space-y-3">
+                  <div className="flex justify-between items-center border-b border-slate-800/80 pb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">🔔</span>
+                      <h3 className="text-sm font-bold text-white">Lembretes & Tarefas com Expiração</h3>
+                    </div>
+                    <button 
+                      onClick={() => setShowNotificationModal(true)} 
+                      className="text-[11px] font-bold text-blue-400 hover:underline"
+                    >
+                      + Novo
+                    </button>
                   </div>
-                  <span className="text-xs font-semibold text-slate-400">{new Date().toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' })}</span>
+
+                  <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                    {activeNotifications.map(n => {
+                      const st = students.find(s => s.id === n.student_id);
+                      const isExpiredToday = n.expiry_date === todayStr;
+
+                      return (
+                        <div key={n.id} className={`p-3 rounded-2xl border bg-[#080c16] flex justify-between items-center text-xs shadow-md transition ${isExpiredToday ? 'border-amber-500 bg-amber-950/20' : 'border-slate-800/80'}`}>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-white text-sm">{n.title}</span>
+                              {st && <span className="bg-blue-950 text-blue-400 text-[10px] font-bold px-2 py-0.5 rounded-lg border border-blue-800/40">{st.name}</span>}
+                              {isExpiredToday && <span className="bg-amber-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full animate-pulse">ÚLTIMO DIA (EXPIRA HOJE)</span>}
+                            </div>
+                            {n.description && <p className="text-slate-400">{n.description}</p>}
+                            <div className="flex gap-3 text-[10px] text-slate-500 font-semibold">
+                              <span>📅 Data: {n.date.split('-').reverse().join('/')} {n.is_full_day ? '(Dia Inteiro)' : `às ${n.time}`}</span>
+                              {n.expiry_date && <span>⏳ Expira em: {n.expiry_date.split('-').reverse().join('/')}</span>}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button 
+                              onClick={() => toggleNotificationComplete(n.id)} 
+                              className="bg-emerald-600/90 hover:bg-emerald-500 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-xl transition shadow"
+                            >
+                              ✓ Concluir
+                            </button>
+                            <button 
+                              onClick={() => deleteNotification(n.id)} 
+                              className="text-rose-400 hover:text-rose-300 font-bold p-1 text-xs"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {activeNotifications.length === 0 && (
+                      <p className="text-center text-slate-500 text-xs py-4">Nenhuma notificação ou lembrete pendente.</p>
+                    )}
+                  </div>
                 </div>
 
-                <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
-                  {todaySchedules.map(sc => (
-                    <div key={sc.id} className="flex items-center justify-between p-3 rounded-2xl bg-[#080c16] border border-slate-800/80 hover:border-blue-600/50 transition">
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-blue-400">{sc.time}</span>
-                          <span className="text-[10px] font-medium text-slate-400 bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-800">{sc.unit}</span>
-                        </div>
-                        <p className="text-sm font-bold text-white">{sc.studentname}</p>
-                      </div>
-                      <div>
-                        {sc.status === 'completed' ? (
-                          <span className="text-xs font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/50 px-3 py-1 rounded-xl">✓ Concluída</span>
-                        ) : (
-                          <button 
-                            onClick={() => handleCheckIn(sc.id, sc.studentid)}
-                            className="text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded-xl shadow-lg shadow-blue-600/20 transition"
-                          >
-                            Check-in
-                          </button>
-                        )}
-                      </div>
+                {/* CARD: ATENDIMENTOS DE HOJE */}
+                <div className="bg-[#0e1422]/80 backdrop-blur-md p-5 rounded-3xl border border-slate-800/80 shadow-xl space-y-4">
+                  <div className="flex justify-between items-center border-b border-slate-800/80 pb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping"></span>
+                      <h3 className="text-sm font-bold text-white tracking-wide">Agenda de Hoje</h3>
                     </div>
-                  ))}
+                    <span className="text-xs font-semibold text-slate-400">{new Date().toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' })}</span>
+                  </div>
 
-                  {todaySchedules.length === 0 && (
-                    <div className="text-center py-10 space-y-2">
-                      <span className="text-3xl block">☕</span>
-                      <p className="text-xs font-medium text-slate-400">Nenhum atendimento agendado para hoje.</p>
-                    </div>
-                  )}
+                  <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                    {todaySchedules.map(sc => (
+                      <div key={sc.id} className="flex items-center justify-between p-3 rounded-2xl bg-[#080c16] border border-slate-800/80 hover:border-blue-600/50 transition">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-blue-400">{sc.time}</span>
+                            <span className="text-[10px] font-medium text-slate-400 bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-800">{sc.unit}</span>
+                          </div>
+                          <p className="text-sm font-bold text-white">{sc.studentname}</p>
+                        </div>
+                        <div>
+                          {sc.status === 'completed' ? (
+                            <span className="text-xs font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/50 px-3 py-1 rounded-xl">✓ Concluída</span>
+                          ) : (
+                            <button 
+                              onClick={() => handleCheckIn(sc.id, sc.studentid)}
+                              className="text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded-xl shadow-lg shadow-blue-600/20 transition"
+                            >
+                              Check-in
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+
+                    {todaySchedules.length === 0 && (
+                      <div className="text-center py-10 space-y-2">
+                        <span className="text-3xl block">☕</span>
+                        <p className="text-xs font-medium text-slate-400">Nenhum atendimento agendado para hoje.</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
+              {/* CARD LATERAL: ANIVERSARIANTES & REPOSIÇÕES */}
               <div className="space-y-4">
                 <div 
                   onClick={goToBirthdayStudents}
@@ -1158,6 +1256,8 @@ export default function App() {
                   .sort((a, b) => a.time.localeCompare(b.time))
                   .map((s) => {
                     const delayed = isDelayed(s.date, s.time, s.status);
+                    const st = students.find(stObj => stObj.id === s.studentid);
+
                     return (
                       <div key={s.id} className={`p-4 rounded-3xl bg-[#0e1422]/90 backdrop-blur-md border shadow-xl space-y-3 relative ${delayed ? 'border-amber-500 ring-2 ring-amber-500/20' : 'border-slate-800/80'}`}>
                         {s.isbonus && (
@@ -1168,7 +1268,17 @@ export default function App() {
                         <div className="flex justify-between items-start">
                           <div>
                             <span className="text-xs font-bold text-blue-400 uppercase">{s.time} • {s.unit}</span>
-                            <h3 className="text-base font-bold text-white">{s.studentname}</h3>
+                            <h3 className="text-base font-bold text-white flex items-center gap-1.5">
+                              {s.studentname}
+                              {st?.student_alert && (
+                                <button 
+                                  onClick={() => alert(`🚨 ALERTA DE ${st.name.toUpperCase()}:\n\n"${st.student_alert}"`)}
+                                  className="text-xs bg-rose-950 text-rose-400 border border-rose-800/50 px-2 py-0.5 rounded-lg font-bold"
+                                >
+                                  ⚠️ Alerta
+                                </button>
+                              )}
+                            </h3>
                             <span className="text-xs text-slate-400">{s.date}</span>
                           </div>
                           <div className="flex flex-col items-end gap-1">
@@ -1413,6 +1523,11 @@ export default function App() {
                         <p className="text-[10px] text-blue-400 font-bold mt-0.5">
                           🎂 Aniversário: {st.birthdate ? `${st.birthdate.split('-')[2]}/${st.birthdate.split('-')[1]}` : 'Não informado'}
                         </p>
+                        {st.student_alert && (
+                          <p className="text-xs text-rose-400 font-bold bg-rose-950/60 border border-rose-800/50 p-2 rounded-xl mt-1.5">
+                            🚨 Alerta: "{st.student_alert}"
+                          </p>
+                        )}
                       </div>
                       <button 
                         onClick={() => handleTogglePaymentStatusDirect(st)}
@@ -1639,7 +1754,7 @@ export default function App() {
           </div>
         )}
 
-        {/* --- ABA 5: PROSPECÇÃO & MARKETING COM MÉTRICAS DE AÇÕES --- */}
+        {/* --- ABA 5: PROSPECÇÃO & MARKETING --- */}
         {activeTab === 'marketing' && (
           <div className="space-y-4 max-w-2xl mx-auto">
             <div className="flex justify-between items-center">
@@ -1688,7 +1803,6 @@ export default function App() {
                       <p className="text-xs text-slate-300">{item.ideia}</p>
                     </div>
 
-                    {/* STATUS DE DESEMPENHO DA CAMPANHA */}
                     <div className="pt-1 flex justify-between items-center text-xs">
                       {hasMetrics ? (
                         <div className="flex items-center gap-3">
@@ -1712,37 +1826,77 @@ export default function App() {
 
       </main>
 
-      {/* --- MODAL REGISTRO DE OFERTA / MARKETING --- */}
+      {/* --- MODAL DE CRIAR NOTIFICAÇÃO / LEMBRETE --- */}
+      {showNotificationModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0e1422] rounded-3xl p-5 w-full max-w-sm space-y-4 border border-slate-800 shadow-2xl">
+            <h3 className="text-lg font-bold text-white">🔔 Criar Notificação / Lembrete</h3>
+            <form onSubmit={saveNotification} className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-slate-300 block mb-1">Título do Lembrete</label>
+                <input required type="text" placeholder="Ex: Mandar mensagem de boas-vindas" value={newNotice.title} onChange={e => setNewNotice({...newNotice, title: e.target.value})} className="w-full p-2.5 bg-[#080c16] border border-slate-800 rounded-2xl text-xs text-white" />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-300 block mb-1">Descrição / Observação</label>
+                <textarea placeholder="Detalhes da tarefa..." value={newNotice.description} onChange={e => setNewNotice({...newNotice, description: e.target.value})} className="w-full p-2.5 bg-[#080c16] border border-slate-800 rounded-2xl text-xs text-white" />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-300 block mb-1">Vincular a um Aluno (Opcional)</label>
+                <select value={newNotice.student_id} onChange={e => setNewNotice({...newNotice, student_id: e.target.value})} className="w-full p-2.5 bg-[#080c16] border border-slate-800 rounded-2xl text-xs text-white">
+                  <option value="">Nenhum (Lembrete Geral)</option>
+                  {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">Data da Notificação</label>
+                  <input type="date" value={newNotice.date} onChange={e => setNewNotice({...newNotice, date: e.target.value})} className="w-full p-2.5 bg-[#080c16] border border-slate-800 rounded-2xl text-xs text-white" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">Horário</label>
+                  <input type="time" disabled={newNotice.is_full_day} value={newNotice.time} onChange={e => setNewNotice({...newNotice, time: e.target.value})} className="w-full p-2.5 bg-[#080c16] border border-slate-800 rounded-2xl text-xs text-white disabled:opacity-30" />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input type="checkbox" id="fullDayCheck" checked={newNotice.is_full_day} onChange={e => setNewNotice({...newNotice, is_full_day: e.target.checked})} className="rounded" />
+                <label htmlFor="fullDayCheck" className="text-xs text-slate-300 font-semibold">Marcar como Dia Inteiro</label>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-300 block mb-1">Data para Expirar / Prazo Final</label>
+                <input type="date" value={newNotice.expiry_date} onChange={e => setNewNotice({...newNotice, expiry_date: e.target.value})} className="w-full p-2.5 bg-[#080c16] border border-slate-800 rounded-2xl text-xs text-white" />
+                <span className="text-[10px] text-slate-500 font-medium">Opcional. Destaca alerta de "Último Dia" na data de expiração.</span>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button type="button" onClick={() => setShowNotificationModal(false)} className="w-1/2 py-2.5 border border-slate-800 rounded-2xl text-sm font-bold text-slate-400 hover:text-white">Cancelar</button>
+                <button type="submit" className="w-1/2 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl text-sm font-bold shadow-lg shadow-blue-600/30">Criar Lembrete</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL MARKETING */}
       {selectedCampaign && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-[#0e1422] rounded-3xl p-5 w-full max-w-sm space-y-4 border border-slate-800 shadow-2xl">
             <h3 className="text-lg font-bold text-white">🚀 Lançar / Registrar Ofertaço</h3>
-            <p className="text-xs text-slate-400">
-              Ação para <strong>{selectedCampaign.nome}</strong>
-            </p>
+            <p className="text-xs text-slate-400">Ação para <strong>{selectedCampaign.nome}</strong></p>
 
             <form onSubmit={saveCampaignMetrics} className="space-y-3">
               <div>
                 <label className="text-xs font-bold text-slate-300 block mb-1">Data Início da Oferta</label>
-                <input 
-                  required 
-                  type="date" 
-                  value={campaignStartDate} 
-                  onChange={e => setCampaignStartDate(e.target.value)} 
-                  className="w-full p-2.5 bg-[#080c16] border border-slate-800 rounded-2xl text-sm font-bold text-white" 
-                />
+                <input required type="date" value={campaignStartDate} onChange={e => setCampaignStartDate(e.target.value)} className="w-full p-2.5 bg-[#080c16] border border-slate-800 rounded-2xl text-sm font-bold text-white" />
               </div>
 
               <div>
                 <label className="text-xs font-bold text-slate-300 block mb-1">Faturamento Obtido (R$)</label>
-                <input 
-                  type="number" 
-                  step="0.01" 
-                  placeholder="Ex: 1500" 
-                  value={campaignRevenue} 
-                  onChange={e => setCampaignRevenue(e.target.value)} 
-                  className="w-full p-2.5 bg-[#080c16] border border-slate-800 rounded-2xl text-sm font-bold text-emerald-400" 
-                />
+                <input type="number" step="0.01" placeholder="Ex: 1500" value={campaignRevenue} onChange={e => setCampaignRevenue(e.target.value)} className="w-full p-2.5 bg-[#080c16] border border-slate-800 rounded-2xl text-sm font-bold text-emerald-400" />
               </div>
 
               <div className="flex gap-2 pt-2">
@@ -1764,34 +1918,17 @@ export default function App() {
             <form onSubmit={handleSavePayment} className="space-y-3">
               <div>
                 <label className="text-xs font-bold text-slate-300 block mb-1">Mês de Referência</label>
-                <input 
-                  required 
-                  type="month" 
-                  value={paymentForm.refMonth} 
-                  onChange={e => setPaymentForm({...paymentForm, refMonth: e.target.value})} 
-                  className="w-full p-2.5 bg-[#080c16] border border-slate-800 rounded-2xl text-sm font-bold text-white" 
-                />
+                <input required type="month" value={paymentForm.refMonth} onChange={e => setPaymentForm({...paymentForm, refMonth: e.target.value})} className="w-full p-2.5 bg-[#080c16] border border-slate-800 rounded-2xl text-sm font-bold text-white" />
               </div>
 
               <div>
                 <label className="text-xs font-bold text-slate-300 block mb-1">Valor Pago (R$)</label>
-                <input 
-                  required 
-                  type="number" 
-                  step="0.01" 
-                  value={paymentForm.amount} 
-                  onChange={e => setPaymentForm({...paymentForm, amount: e.target.value})} 
-                  className="w-full p-2.5 bg-[#080c16] border border-slate-800 rounded-2xl text-sm font-bold text-emerald-400" 
-                />
+                <input required type="number" step="0.01" value={paymentForm.amount} onChange={e => setPaymentForm({...paymentForm, amount: e.target.value})} className="w-full p-2.5 bg-[#080c16] border border-slate-800 rounded-2xl text-sm font-bold text-emerald-400" />
               </div>
 
               <div>
                 <label className="text-xs font-bold text-slate-300 block mb-1">Forma de Pagamento Utilizada</label>
-                <select 
-                  value={paymentForm.method} 
-                  onChange={e => setPaymentForm({...paymentForm, method: e.target.value})} 
-                  className="w-full p-2.5 bg-[#080c16] border border-slate-800 rounded-2xl text-sm font-bold text-white"
-                >
+                <select value={paymentForm.method} onChange={e => setPaymentForm({...paymentForm, method: e.target.value})} className="w-full p-2.5 bg-[#080c16] border border-slate-800 rounded-2xl text-sm font-bold text-white">
                   {FORMAS_PAGAMENTO.map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
               </div>
@@ -1799,14 +1936,7 @@ export default function App() {
               {paymentForm.method === 'Misto / Dividido' && (
                 <div>
                   <label className="text-xs font-bold text-slate-300 block mb-1">Detalhamento da Divisão</label>
-                  <input 
-                    required 
-                    type="text" 
-                    placeholder="Ex: R$ 200 Pix + R$ 300 Cartão Crédito" 
-                    value={paymentForm.details} 
-                    onChange={e => setPaymentForm({...paymentForm, details: e.target.value})} 
-                    className="w-full p-2.5 bg-[#080c16] border border-slate-800 rounded-2xl text-xs text-white" 
-                  />
+                  <input required type="text" placeholder="Ex: R$ 200 Pix + R$ 300 Cartão Crédito" value={paymentForm.details} onChange={e => setPaymentForm({...paymentForm, details: e.target.value})} className="w-full p-2.5 bg-[#080c16] border border-slate-800 rounded-2xl text-xs text-white" />
                 </div>
               )}
 
@@ -1823,9 +1953,7 @@ export default function App() {
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-[#0e1422] rounded-3xl p-5 w-full max-w-sm space-y-4 border border-slate-800 shadow-2xl">
             <h3 className="text-lg font-bold text-white">⚡ Gerar ou Limpar Mês</h3>
-            <p className="text-xs text-slate-400">
-              Gere automaticamente as aulas do mês com base na grade fixa ou limpe os agendamentos do mês selecionado.
-            </p>
+            <p className="text-xs text-slate-400">Gere automaticamente as aulas do mês com base na grade fixa ou limpe os agendamentos do mês selecionado.</p>
 
             <form onSubmit={handleGenerateBatchSchedules} className="space-y-3">
               <div className="grid grid-cols-2 gap-2">
@@ -1877,14 +2005,7 @@ export default function App() {
             </div>
 
             <form onSubmit={handleAddUnit} className="flex gap-2">
-              <input 
-                required 
-                type="text" 
-                placeholder="Nova Unidade (ex: EC Moinhos)" 
-                value={newUnitName} 
-                onChange={e => setNewUnitName(e.target.value)} 
-                className="flex-1 p-2.5 bg-[#080c16] border border-slate-800 rounded-2xl text-sm text-white" 
-              />
+              <input required type="text" placeholder="Nova Unidade (ex: EC Moinhos)" value={newUnitName} onChange={e => setNewUnitName(e.target.value)} className="flex-1 p-2.5 bg-[#080c16] border border-slate-800 rounded-2xl text-sm text-white" />
               <button type="submit" className="bg-blue-600 text-white px-3.5 rounded-2xl text-xs font-bold">+ Adicionar</button>
             </form>
 
@@ -1915,6 +2036,11 @@ export default function App() {
               <div>
                 <label className="text-xs font-bold text-slate-300 block mb-1">Nome</label>
                 <input required type="text" placeholder="Nome Completo" value={newStudent.name} onChange={e => setNewStudent({...newStudent, name: e.target.value})} className="w-full p-2.5 bg-[#080c16] border border-slate-800 rounded-2xl text-sm text-white" />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-300 block mb-1">🚨 Alerta do Aluno (Ex: Lesão no joelho, Acomodação)</label>
+                <input type="text" placeholder="Aviso importante ao clicar no aluno" value={newStudent.student_alert} onChange={e => setNewStudent({...newStudent, student_alert: e.target.value})} className="w-full p-2.5 bg-[#080c16] border border-rose-800/60 rounded-2xl text-xs font-bold text-rose-300" />
               </div>
 
               <div>
@@ -1979,11 +2105,7 @@ export default function App() {
 
               <div>
                 <label className="text-xs font-bold text-slate-300 block mb-1">Forma de Pagamento Preferencial</label>
-                <select 
-                  value={newStudent.preferred_payment} 
-                  onChange={e => setNewStudent({...newStudent, preferred_payment: e.target.value})} 
-                  className="w-full p-2.5 bg-[#080c16] border border-slate-800 rounded-2xl text-sm font-bold text-white"
-                >
+                <select value={newStudent.preferred_payment} onChange={e => setNewStudent({...newStudent, preferred_payment: e.target.value})} className="w-full p-2.5 bg-[#080c16] border border-slate-800 rounded-2xl text-sm font-bold text-white">
                   {FORMAS_PAGAMENTO.map(f => <option key={f} value={f}>{f}</option>)}
                 </select>
               </div>
@@ -2081,9 +2203,7 @@ export default function App() {
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-[#0e1422] rounded-3xl p-5 w-full max-w-sm space-y-4 border border-slate-800 shadow-2xl">
             <h3 className="text-lg font-bold text-white">Remanejar ou Desmarcar</h3>
-            <p className="text-xs text-slate-400">
-              Escolha uma nova data para <strong>{selectedSchedule?.studentname}</strong> ou libere o horário gerando um voucher.
-            </p>
+            <p className="text-xs text-slate-400">Escolha uma nova data para <strong>{selectedSchedule?.studentname}</strong> ou libere o horário gerando um voucher.</p>
 
             <form onSubmit={handleSaveReschedule} className="space-y-3">
               <div>
@@ -2108,11 +2228,7 @@ export default function App() {
               >
                 ↺ Reagendar Depois (Gerar Voucher)
               </button>
-              <button 
-                type="button" 
-                onClick={() => setShowRescheduleModal(false)} 
-                className="w-full py-2 border border-slate-800 rounded-2xl text-xs font-bold text-slate-500"
-              >
+              <button type="button" onClick={() => setShowRescheduleModal(false)} className="w-full py-2 border border-slate-800 rounded-2xl text-xs font-bold text-slate-500">
                 Cancelar
               </button>
             </div>
