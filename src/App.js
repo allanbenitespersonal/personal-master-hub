@@ -194,6 +194,21 @@ export default function App() {
   const [manualPayMethod, setManualPayMethod] = useState('Pix');
   const [manualPayDetails, setManualPayDetails] = useState('');
 
+  // PRESCRIÇÃO DE TREINOS & DIETA (ADMIN)
+  const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
+  const [selectedStudentForWorkout, setSelectedStudentForWorkout] = useState(null);
+  const [activeProtocol, setActiveProtocol] = useState({ title: 'Protocolo 1.0', duration_days: 60 });
+  const [studentWorkoutsList, setStudentWorkoutsList] = useState([]);
+  const [studentDiet, setStudentDiet] = useState({ water_target_liters: 2.5, calories_target: 2000, protein_g: 150, carbs_g: 160, fat_g: 55 });
+
+  const [newWorkoutForm, setNewWorkoutForm] = useState({
+    day_label: 'Segunda',
+    observations: 'Olhar as observações de cada exercício.',
+    exercises: [
+      { name: '', sets: 4, reps: '10-12', load: '0kg', rest: '60s', video_url: '' }
+    ]
+  });
+
   // Modais
   const [showStudentModal, setShowStudentModal] = useState(false);
   const [editingStudentId, setEditingStudentId] = useState(null);
@@ -281,7 +296,7 @@ export default function App() {
       setCurrentUser({ email: loginEmail, name: 'Cristina Mello (Moderadora)' });
     } else {
       setUserRole('super_admin');
-      setCurrentUser({ email: loginEmail || 'allan@masterhub.com', name: 'Allan Benites (Super Admin)' });
+      setCurrentUser({ email: loginEmail || 'allandemellobenites@gmail.com', name: 'Allan Benites (Super Admin)' });
     }
   };
 
@@ -322,6 +337,98 @@ export default function App() {
     await supabase.from('pending_approvals').update({ status: 'rejected' }).eq('id', approvalId);
     alert('Ação recusada e removida da fila.');
     fetchPendingApprovals();
+  };
+
+  // GERENCIAMENTO DE PRESCRIÇÃO DE TREINOS (ADMIN)
+  const handleOpenPrescription = async (student) => {
+    setSelectedStudentForWorkout(student);
+    
+    // Busca treinos gravados do aluno
+    const { data: workouts } = await supabase.from('protocol_workouts').select('*').eq('student_id', student.id);
+    if (workouts) setStudentWorkoutsList(workouts);
+
+    // Busca dieta/metas do aluno
+    const { data: dietData } = await supabase.from('student_diets').select('*').eq('student_id', student.id).single();
+    if (dietData) {
+      setStudentDiet(dietData);
+    } else {
+      setStudentDiet({ water_target_liters: 2.5, calories_target: 2000, protein_g: 150, carbs_g: 160, fat_g: 55 });
+    }
+
+    setShowPrescriptionModal(true);
+  };
+
+  const handleAddExerciseRow = () => {
+    setNewWorkoutForm({
+      ...newWorkoutForm,
+      exercises: [
+        ...newWorkoutForm.exercises,
+        { name: '', sets: 4, reps: '10-12', load: '0kg', rest: '60s', video_url: '' }
+      ]
+    });
+  };
+
+  const handleRemoveExerciseRow = (index) => {
+    const updated = newWorkoutForm.exercises.filter((_, i) => i !== index);
+    setNewWorkoutForm({ ...newWorkoutForm, exercises: updated });
+  };
+
+  const handleExerciseChange = (index, field, value) => {
+    const updated = [...newWorkoutForm.exercises];
+    updated[index][field] = value;
+    setNewWorkoutForm({ ...newWorkoutForm, exercises: updated });
+  };
+
+  const handleSaveWorkoutToStudent = async (e) => {
+    e.preventDefault();
+    if (!selectedStudentForWorkout) return;
+
+    const payload = {
+      student_id: selectedStudentForWorkout.id,
+      day_label: newWorkoutForm.day_label,
+      observations: newWorkoutForm.observations,
+      exercises: newWorkoutForm.exercises
+    };
+
+    const { error } = await supabase.from('protocol_workouts').insert([payload]);
+    if (error) {
+      alert('Erro ao salvar ficha: ' + error.message);
+    } else {
+      alert(`Ficha "${newWorkoutForm.day_label}" gravada com sucesso para ${selectedStudentForWorkout.name}!`);
+      const { data: workouts } = await supabase.from('protocol_workouts').select('*').eq('student_id', selectedStudentForWorkout.id);
+      if (workouts) setStudentWorkoutsList(workouts);
+      setNewWorkoutForm({
+        day_label: 'Segunda',
+        observations: 'Olhar as observações de cada exercício.',
+        exercises: [{ name: '', sets: 4, reps: '10-12', load: '0kg', rest: '60s', video_url: '' }]
+      });
+    }
+  };
+
+  const handleDeleteWorkoutFromStudent = async (workoutId) => {
+    if (window.confirm('Excluir esta ficha de treino definitivamente?')) {
+      await supabase.from('protocol_workouts').delete().eq('id', workoutId);
+      const { data: workouts } = await supabase.from('protocol_workouts').select('*').eq('student_id', selectedStudentForWorkout.id);
+      if (workouts) setStudentWorkoutsList(workouts);
+    }
+  };
+
+  const handleSaveStudentDiet = async (e) => {
+    e.preventDefault();
+    if (!selectedStudentForWorkout) return;
+
+    const payload = {
+      student_id: selectedStudentForWorkout.id,
+      water_target_liters: Number(studentDiet.water_target_liters),
+      calories_target: Number(studentDiet.calories_target),
+      protein_g: Number(studentDiet.protein_g),
+      carbs_g: Number(studentDiet.carbs_g),
+      fat_g: Number(studentDiet.fat_g)
+    };
+
+    const { error } = await supabase.from('student_diets').upsert([payload], { onConflict: 'student_id' });
+    if (error) alert('Erro ao salvar metas nutricionais: ' + error.message);
+    else alert('Metas de água e macros salvas para o aluno!');
   };
 
   // VERIFICADOR DE ALERTA INDIVIDUAL DO ALUNO
@@ -1710,12 +1817,21 @@ export default function App() {
                           </p>
                         )}
                       </div>
-                      <button 
-                        onClick={() => handleTogglePaymentStatusDirect(st)}
-                        className={`text-xs font-bold px-3 py-1 rounded-full border transition ${!hasPaidCurrentMonth ? 'bg-rose-950/60 text-rose-400 border-rose-800/50' : 'bg-emerald-950/60 text-emerald-400 border-emerald-800/50'}`}
-                      >
-                        {!hasPaidCurrentMonth ? 'Pendente Mês Atual' : 'Em Dia (Quitado)'}
-                      </button>
+                      <div className="flex flex-col items-end gap-1.5">
+                        <button 
+                          onClick={() => handleTogglePaymentStatusDirect(st)}
+                          className={`text-xs font-bold px-3 py-1 rounded-full border transition ${!hasPaidCurrentMonth ? 'bg-rose-950/60 text-rose-400 border-rose-800/50' : 'bg-emerald-950/60 text-emerald-400 border-emerald-800/50'}`}
+                        >
+                          {!hasPaidCurrentMonth ? 'Pendente Mês Atual' : 'Em Dia (Quitado)'}
+                        </button>
+
+                        <button 
+                          onClick={() => handleOpenPrescription(st)}
+                          className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-3 py-1 rounded-full shadow transition flex items-center gap-1"
+                        >
+                          🏋️ Prescrever Treinos
+                        </button>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 bg-[#080c16] p-3 rounded-2xl border border-slate-800/60">
@@ -2006,6 +2122,215 @@ export default function App() {
         )}
 
       </main>
+
+      {/* MODAL PRESCRIÇÃO DE TREINOS & DIETA (ADMIN) */}
+      {showPrescriptionModal && selectedStudentForWorkout && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0e1422] rounded-3xl p-5 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto border border-slate-800 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="text-lg font-bold text-white">🏋️ Prescrever Treino & Metas</h3>
+                <p className="text-xs text-indigo-400 font-bold">Aluno: {selectedStudentForWorkout.name}</p>
+              </div>
+              <button onClick={() => setShowPrescriptionModal(false)} className="text-slate-400 text-sm font-bold">✕</button>
+            </div>
+
+            {/* FICHAS JÁ GRAVADAS */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Fichas de Treino Ativas ({studentWorkoutsList.length})</h4>
+              <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                {studentWorkoutsList.map(w => (
+                  <div key={w.id} className="p-3 bg-[#080c16] rounded-2xl border border-slate-800 flex justify-between items-center text-xs">
+                    <div>
+                      <span className="font-bold text-white block">{w.day_label}</span>
+                      <span className="text-slate-400 text-[10px]">{w.exercises?.length || 0} exercícios cadastrados</span>
+                    </div>
+                    <button 
+                      onClick={() => handleDeleteWorkoutFromStudent(w.id)}
+                      className="text-rose-400 font-bold text-xs hover:underline"
+                    >
+                      🗑️ Remover Ficha
+                    </button>
+                  </div>
+                ))}
+                {studentWorkoutsList.length === 0 && (
+                  <p className="text-slate-500 text-xs py-2 italic">Nenhuma ficha criada para este aluno ainda.</p>
+                )}
+              </div>
+            </div>
+
+            {/* FORMULÁRIO DE NOVA FICHA */}
+            <form onSubmit={handleSaveWorkoutToStudent} className="space-y-3 pt-3 border-t border-slate-800">
+              <h4 className="text-xs font-bold text-blue-400 uppercase tracking-wider">+ Adicionar Nova Ficha de Treino</h4>
+              
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-300 block mb-1">Dia / Título da Ficha</label>
+                  <input 
+                    required 
+                    type="text" 
+                    placeholder="Ex: Segunda ou Treino A - Peito" 
+                    value={newWorkoutForm.day_label} 
+                    onChange={e => setNewWorkoutForm({ ...newWorkoutForm, day_label: e.target.value })} 
+                    className="w-full p-2 bg-[#080c16] border border-slate-800 rounded-xl text-xs text-white" 
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-300 block mb-1">Observações Gerais</label>
+                  <input 
+                    type="text" 
+                    placeholder="Ex: Olhar observações de cada ex." 
+                    value={newWorkoutForm.observations} 
+                    onChange={e => setNewWorkoutForm({ ...newWorkoutForm, observations: e.target.value })} 
+                    className="w-full p-2 bg-[#080c16] border border-slate-800 rounded-xl text-xs text-white" 
+                  />
+                </div>
+              </div>
+
+              {/* LISTA DE EXERCÍCIOS DA FICHA */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-bold text-slate-300 uppercase">Exercícios da Ficha</label>
+                  <button 
+                    type="button" 
+                    onClick={handleAddExerciseRow} 
+                    className="text-[10px] font-bold text-blue-400 underline"
+                  >
+                    + Exercício
+                  </button>
+                </div>
+
+                {newWorkoutForm.exercises.map((ex, idx) => (
+                  <div key={idx} className="p-2.5 bg-[#080c16] border border-slate-800 rounded-2xl space-y-2 text-xs">
+                    <div className="flex gap-2">
+                      <input 
+                        required 
+                        type="text" 
+                        placeholder="Nome do Exercício (ex: Hack Squat)" 
+                        value={ex.name} 
+                        onChange={e => handleExerciseChange(idx, 'name', e.target.value)} 
+                        className="flex-1 p-2 bg-[#0e1422] border border-slate-800 rounded-xl text-xs text-white font-bold" 
+                      />
+                      <button 
+                        type="button" 
+                        onClick={() => handleRemoveExerciseRow(idx)} 
+                        className="text-rose-400 font-bold px-2"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-1.5">
+                      <div>
+                        <label className="text-[9px] text-slate-400 block">Séries</label>
+                        <input 
+                          type="number" 
+                          value={ex.sets} 
+                          onChange={e => handleExerciseChange(idx, 'sets', e.target.value)} 
+                          className="w-full p-1.5 bg-[#0e1422] border border-slate-800 rounded-lg text-center text-xs text-white font-bold" 
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-slate-400 block">Reps</label>
+                        <input 
+                          type="text" 
+                          value={ex.reps} 
+                          onChange={e => handleExerciseChange(idx, 'reps', e.target.value)} 
+                          className="w-full p-1.5 bg-[#0e1422] border border-slate-800 rounded-lg text-center text-xs text-white font-bold" 
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-slate-400 block">Carga Alvo</label>
+                        <input 
+                          type="text" 
+                          value={ex.load} 
+                          onChange={e => handleExerciseChange(idx, 'load', e.target.value)} 
+                          className="w-full p-1.5 bg-[#0e1422] border border-slate-800 rounded-lg text-center text-xs text-emerald-400 font-bold" 
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-slate-400 block">Vídeo URL</label>
+                        <input 
+                          type="text" 
+                          placeholder="Link" 
+                          value={ex.video_url} 
+                          onChange={e => handleExerciseChange(idx, 'video_url', e.target.value)} 
+                          className="w-full p-1.5 bg-[#0e1422] border border-slate-800 rounded-lg text-xs text-white" 
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <button type="submit" className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl text-xs font-bold shadow-lg shadow-indigo-600/30 transition">
+                ✓ Salvar Ficha de Treino para o Aluno
+              </button>
+            </form>
+
+            {/* SEÇÃO METAS / DIETA */}
+            <form onSubmit={handleSaveStudentDiet} className="space-y-3 pt-3 border-t border-slate-800">
+              <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">🥗 Metas de Água & Macronutrientes (Dieta)</h4>
+              
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-300 block mb-1">Meta de Água (L/dia)</label>
+                  <input 
+                    type="number" 
+                    step="0.05" 
+                    value={studentDiet.water_target_liters} 
+                    onChange={e => setStudentDiet({ ...studentDiet, water_target_liters: e.target.value })} 
+                    className="w-full p-2 bg-[#080c16] border border-slate-800 rounded-xl text-xs text-white font-bold" 
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-300 block mb-1">Calorias Alvo (kcal)</label>
+                  <input 
+                    type="number" 
+                    value={studentDiet.calories_target} 
+                    onChange={e => setStudentDiet({ ...studentDiet, calories_target: e.target.value })} 
+                    className="w-full p-2 bg-[#080c16] border border-slate-800 rounded-xl text-xs text-white font-bold" 
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="text-[10px] font-bold text-blue-400 block mb-1">Proteínas (g)</label>
+                  <input 
+                    type="number" 
+                    value={studentDiet.protein_g} 
+                    onChange={e => setStudentDiet({ ...studentDiet, protein_g: e.target.value })} 
+                    className="w-full p-2 bg-[#080c16] border border-slate-800 rounded-xl text-xs text-white font-bold" 
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-amber-400 block mb-1">Carbos (g)</label>
+                  <input 
+                    type="number" 
+                    value={studentDiet.carbs_g} 
+                    onChange={e => setStudentDiet({ ...studentDiet, carbs_g: e.target.value })} 
+                    className="w-full p-2 bg-[#080c16] border border-slate-800 rounded-xl text-xs text-white font-bold" 
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-rose-400 block mb-1">Gordura (g)</label>
+                  <input 
+                    type="number" 
+                    value={studentDiet.fat_g} 
+                    onChange={e => setStudentDiet({ ...studentDiet, fat_g: e.target.value })} 
+                    className="w-full p-2 bg-[#080c16] border border-slate-800 rounded-xl text-xs text-white font-bold" 
+                  />
+                </div>
+              </div>
+
+              <button type="submit" className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-bold shadow-lg shadow-emerald-600/30 transition">
+                ✓ Atualizar Metas de Água/Macros
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* MODAL DE NOTIFICAÇÕES */}
       {showNotificationModal && (
