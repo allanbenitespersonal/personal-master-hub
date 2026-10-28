@@ -168,7 +168,7 @@ export default function App() {
     alert(`Ação registrada para "${selectedCampaign.nome}"!`);
     setSelectedCampaign(null);
   };
-  
+
   // ESTADOS DA AGENDA
   const [calendarView, setCalendarView] = useState('mes');
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -194,18 +194,36 @@ export default function App() {
   const [manualPayMethod, setManualPayMethod] = useState('Pix');
   const [manualPayDetails, setManualPayDetails] = useState('');
 
-  // PRESCRIÇÃO DE TREINOS & DIETA (ADMIN)
+  // PRESCRIÇÃO DE TREINOS & DIETA CIENTÍFICA
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
   const [selectedStudentForWorkout, setSelectedStudentForWorkout] = useState(null);
-  const [activeProtocol, setActiveProtocol] = useState({ title: 'Protocolo 1.0', duration_days: 60 });
   const [studentWorkoutsList, setStudentWorkoutsList] = useState([]);
   const [studentDiet, setStudentDiet] = useState({ water_target_liters: 2.5, calories_target: 2000, protein_g: 150, carbs_g: 160, fat_g: 55 });
+
+  const [evalData, setEvalData] = useState({
+    weight: 70,
+    height: 170,
+    age: 30,
+    gender: 'male',
+    activityFactor: 1.375,
+    objective: 'fat_loss'
+  });
+
+  const [calcResults, setCalcResults] = useState({
+    tmb: 0,
+    get: 0,
+    targetCalories: 0,
+    proteinG: 0,
+    carbsG: 0,
+    fatG: 0,
+    hydrationMl: 0
+  });
 
   const [newWorkoutForm, setNewWorkoutForm] = useState({
     day_label: 'Segunda',
     observations: 'Olhar as observações de cada exercício.',
     exercises: [
-      { name: '', sets: 4, reps: '10-12', load: '0kg', rest: '60s', video_url: '' }
+      { name: '', sets: 4, reps: '10-12', rpe: 8, restSec: 60, video_url: '' }
     ]
   });
 
@@ -224,7 +242,7 @@ export default function App() {
   const [newUnitName, setNewUnitName] = useState('');
   const [batchYear, setBatchYear] = useState(new Date().getFullYear());
   const [batchMonth, setBatchMonth] = useState(new Date().getMonth() + 1);
-  
+
   const [paymentForm, setPaymentForm] = useState({
     method: 'Pix',
     details: '',
@@ -248,6 +266,55 @@ export default function App() {
     fetchTransactions();
     fetchPendingApprovals();
   }, []);
+
+  // Cálculo Nutricional Científico (Mifflin-St Jeor + Macros)
+  useEffect(() => {
+    const w = parseFloat(evalData.weight) || 0;
+    const h = parseFloat(evalData.height) || 0;
+    const a = parseInt(evalData.age) || 0;
+    const af = parseFloat(evalData.activityFactor) || 1.2;
+
+    if (w <= 0 || h <= 0 || a <= 0) return;
+
+    let baseTmb = (10 * w) + (6.25 * h) - (5 * a);
+    baseTmb = evalData.gender === 'male' ? baseTmb + 5 : baseTmb - 161;
+
+    const totalGet = baseTmb * af;
+
+    let calories = totalGet;
+    let protPerKg = 2.0;
+
+    if (evalData.objective === 'fat_loss') {
+      calories = totalGet - 500;
+      protPerKg = 2.2;
+    } else if (evalData.objective === 'hypertrophy') {
+      calories = totalGet + 300;
+      protPerKg = 2.0;
+    } else {
+      protPerKg = 1.8;
+    }
+
+    const proteinG = w * protPerKg;
+    const proteinKcal = proteinG * 4;
+
+    const fatKcal = calories * 0.25;
+    const fatG = fatKcal / 9;
+
+    const carbsKcal = calories - (proteinKcal + fatKcal);
+    const carbsG = Math.max(0, carbsKcal / 4);
+
+    const hydrationMl = w * 40;
+
+    setCalcResults({
+      tmb: Math.round(baseTmb),
+      get: Math.round(totalGet),
+      targetCalories: Math.round(calories),
+      proteinG: Math.round(proteinG),
+      carbsG: Math.round(carbsG),
+      fatG: Math.round(fatG),
+      hydrationMl: Math.round(hydrationMl)
+    });
+  }, [evalData]);
 
   const fetchUnits = async () => {
     const { data, error } = await supabase.from('units').select('*');
@@ -339,7 +406,7 @@ export default function App() {
     fetchPendingApprovals();
   };
 
-  // GERENCIAMENTO DE PRESCRIÇÃO DE TREINOS (ADMIN)
+  // GERENCIAMENTO DE PRESCRIÇÃO DE TREINOS & MÉTRICAS (ADMIN)
   const handleOpenPrescription = async (student) => {
     setSelectedStudentForWorkout(student);
     
@@ -355,7 +422,7 @@ export default function App() {
       setStudentDiet({ water_target_liters: 2.5, calories_target: 2000, protein_g: 150, carbs_g: 160, fat_g: 55 });
     }
 
-    setShowPrescriptionModal(true);
+    setActiveTab('prescricao');
   };
 
   const handleAddExerciseRow = () => {
@@ -363,7 +430,7 @@ export default function App() {
       ...newWorkoutForm,
       exercises: [
         ...newWorkoutForm.exercises,
-        { name: '', sets: 4, reps: '10-12', load: '0kg', rest: '60s', video_url: '' }
+        { name: '', sets: 4, reps: '10-12', rpe: 8, restSec: 60, video_url: '' }
       ]
     });
   };
@@ -400,7 +467,7 @@ export default function App() {
       setNewWorkoutForm({
         day_label: 'Segunda',
         observations: 'Olhar as observações de cada exercício.',
-        exercises: [{ name: '', sets: 4, reps: '10-12', load: '0kg', rest: '60s', video_url: '' }]
+        exercises: [{ name: '', sets: 4, reps: '10-12', rpe: 8, restSec: 60, video_url: '' }]
       });
     }
   };
@@ -419,16 +486,18 @@ export default function App() {
 
     const payload = {
       student_id: selectedStudentForWorkout.id,
-      water_target_liters: Number(studentDiet.water_target_liters),
-      calories_target: Number(studentDiet.calories_target),
-      protein_g: Number(studentDiet.protein_g),
-      carbs_g: Number(studentDiet.carbs_g),
-      fat_g: Number(studentDiet.fat_g)
+      tmb: calcResults.tmb,
+      get_total: calcResults.get,
+      calories_target: calcResults.targetCalories,
+      protein_g: calcResults.proteinG,
+      carbs_g: calcResults.carbsG,
+      fat_g: calcResults.fatG,
+      water_target_liters: (calcResults.hydrationMl / 1000).toFixed(1)
     };
 
     const { error } = await supabase.from('student_diets').upsert([payload], { onConflict: 'student_id' });
     if (error) alert('Erro ao salvar metas nutricionais: ' + error.message);
-    else alert('Metas de água e macros salvas para o aluno!');
+    else alert('Metas biométricas e nutricionais calculadas salvas para o aluno!');
   };
 
   // VERIFICADOR DE ALERTA INDIVIDUAL DO ALUNO
@@ -1180,7 +1249,7 @@ export default function App() {
           <div className="bg-amber-950/40 border border-amber-600/60 p-4 rounded-3xl shadow-xl space-y-3">
             <div className="flex justify-between items-center border-b border-amber-800/50 pb-2">
               <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-2">
-                <span>📩</span> Central de Moderação (Alterações da Cris para Aprovar)
+                <span>📬</span> Central de Moderação (Alterações da Cris para Aprovar)
               </h3>
               <span className="text-[10px] font-black bg-amber-500 text-black px-2 py-0.5 rounded-full">
                 {pendingApprovals.length} Pendente(s)
@@ -2121,216 +2190,283 @@ export default function App() {
           </div>
         )}
 
-      </main>
-
-      {/* MODAL PRESCRIÇÃO DE TREINOS & DIETA (ADMIN) */}
-      {showPrescriptionModal && selectedStudentForWorkout && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0e1422] rounded-3xl p-5 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto border border-slate-800 shadow-2xl">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+        {/* ABA NOVA: PRESCRIÇÃO DE TREINOS & DIETA CIENTÍFICA */}
+        {activeTab === 'prescricao' && (
+          <div className="space-y-4 max-w-3xl mx-auto">
+            <div className="flex justify-between items-center">
               <div>
-                <h3 className="text-lg font-bold text-white">🏋️ Prescrever Treino & Metas</h3>
-                <p className="text-xs text-indigo-400 font-bold">Aluno: {selectedStudentForWorkout.name}</p>
+                <h2 className="text-xl font-bold text-white">📋 Prescrição & Avaliação Física Científica</h2>
+                <p className="text-xs text-indigo-400 font-bold mt-0.5">
+                  Aluno Selecionado: {selectedStudentForWorkout ? selectedStudentForWorkout.name : 'Nenhum (Selecione um aluno na aba Alunos)'}
+                </p>
               </div>
-              <button onClick={() => setShowPrescriptionModal(false)} className="text-slate-400 text-sm font-bold">✕</button>
+              <button 
+                onClick={() => setActiveTab('alunos')} 
+                className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-xl border border-slate-700 transition"
+              >
+                ➔ Selecionar Aluno
+              </button>
             </div>
 
-            {/* FICHAS JÁ GRAVADAS */}
-            <div className="space-y-2">
-              <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Fichas de Treino Ativas ({studentWorkoutsList.length})</h4>
-              <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-                {studentWorkoutsList.map(w => (
-                  <div key={w.id} className="p-3 bg-[#080c16] rounded-2xl border border-slate-800 flex justify-between items-center text-xs">
-                    <div>
-                      <span className="font-bold text-white block">{w.day_label}</span>
-                      <span className="text-slate-400 text-[10px]">{w.exercises?.length || 0} exercícios cadastrados</span>
-                    </div>
-                    <button 
-                      onClick={() => handleDeleteWorkoutFromStudent(w.id)}
-                      className="text-rose-400 font-bold text-xs hover:underline"
-                    >
-                      🗑️ Remover Ficha
-                    </button>
-                  </div>
-                ))}
-                {studentWorkoutsList.length === 0 && (
-                  <p className="text-slate-500 text-xs py-2 italic">Nenhuma ficha criada para este aluno ainda.</p>
-                )}
-              </div>
-            </div>
-
-            {/* FORMULÁRIO DE NOVA FICHA */}
-            <form onSubmit={handleSaveWorkoutToStudent} className="space-y-3 pt-3 border-t border-slate-800">
-              <h4 className="text-xs font-bold text-blue-400 uppercase tracking-wider">+ Adicionar Nova Ficha de Treino</h4>
-              
-              <div className="grid grid-cols-2 gap-2">
+            {/* AVALIAÇÃO FÍSICA & PARÂMETROS BIOMÉTRICOS */}
+            <div className="bg-[#0e1422]/90 backdrop-blur-md p-5 rounded-3xl border border-indigo-800/50 shadow-xl space-y-4">
+              <h3 className="text-sm font-bold text-white uppercase tracking-wide border-b border-slate-800 pb-2">
+                1. Parâmetros Antropométricos do Aluno
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 <div>
-                  <label className="text-[10px] font-bold text-slate-300 block mb-1">Dia / Título da Ficha</label>
+                  <label className="text-[10px] font-bold text-slate-400 block mb-1">Peso (kg)</label>
                   <input 
-                    required 
-                    type="text" 
-                    placeholder="Ex: Segunda ou Treino A - Peito" 
-                    value={newWorkoutForm.day_label} 
-                    onChange={e => setNewWorkoutForm({ ...newWorkoutForm, day_label: e.target.value })} 
-                    className="w-full p-2 bg-[#080c16] border border-slate-800 rounded-xl text-xs text-white" 
+                    type="number" 
+                    value={evalData.weight} 
+                    onChange={e => setEvalData({ ...evalData, weight: e.target.value })} 
+                    className="w-full p-2 bg-[#080c16] border border-slate-800 rounded-xl text-xs font-bold text-white" 
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-slate-300 block mb-1">Observações Gerais</label>
+                  <label className="text-[10px] font-bold text-slate-400 block mb-1">Altura (cm)</label>
                   <input 
-                    type="text" 
-                    placeholder="Ex: Olhar observações de cada ex." 
-                    value={newWorkoutForm.observations} 
-                    onChange={e => setNewWorkoutForm({ ...newWorkoutForm, observations: e.target.value })} 
-                    className="w-full p-2 bg-[#080c16] border border-slate-800 rounded-xl text-xs text-white" 
+                    type="number" 
+                    value={evalData.height} 
+                    onChange={e => setEvalData({ ...evalData, height: e.target.value })} 
+                    className="w-full p-2 bg-[#080c16] border border-slate-800 rounded-xl text-xs font-bold text-white" 
                   />
                 </div>
-              </div>
-
-              {/* LISTA DE EXERCÍCIOS DA FICHA */}
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <label className="text-[10px] font-bold text-slate-300 uppercase">Exercícios da Ficha</label>
-                  <button 
-                    type="button" 
-                    onClick={handleAddExerciseRow} 
-                    className="text-[10px] font-bold text-blue-400 underline"
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 block mb-1">Idade (anos)</label>
+                  <input 
+                    type="number" 
+                    value={evalData.age} 
+                    onChange={e => setEvalData({ ...evalData, age: e.target.value })} 
+                    className="w-full p-2 bg-[#080c16] border border-slate-800 rounded-xl text-xs font-bold text-white" 
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 block mb-1">Gênero Biológico</label>
+                  <select 
+                    value={evalData.gender} 
+                    onChange={e => setEvalData({ ...evalData, gender: e.target.value })} 
+                    className="w-full p-2 bg-[#080c16] border border-slate-800 rounded-xl text-xs text-white"
                   >
-                    + Exercício
-                  </button>
+                    <option value="male">Masculino</option>
+                    <option value="female">Feminino</option>
+                  </select>
                 </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 block mb-1">Fator de Atividade</label>
+                  <select 
+                    value={evalData.activityFactor} 
+                    onChange={e => setEvalData({ ...evalData, activityFactor: e.target.value })} 
+                    className="w-full p-2 bg-[#080c16] border border-slate-800 rounded-xl text-xs text-white"
+                  >
+                    <option value={1.2}>Sedentário</option>
+                    <option value={1.375}>Levemente Ativo (1-3x/sem)</option>
+                    <option value={1.55}>Moderadamente Ativo (3-5x/sem)</option>
+                    <option value={1.725}>Muito Ativo (6-7x/sem)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 block mb-1">Objetivo Científico</label>
+                  <select 
+                    value={evalData.objective} 
+                    onChange={e => setEvalData({ ...evalData, objective: e.target.value })} 
+                    className="w-full p-2 bg-[#080c16] border border-slate-800 rounded-xl text-xs text-white"
+                  >
+                    <option value="fat_loss">Emagrecimento (-500 kcal)</option>
+                    <option value="hypertrophy">Hipertrofia (+300 kcal)</option>
+                    <option value="maintenance">Manutenção de Peso</option>
+                  </select>
+                </div>
+              </div>
+            </div>
 
-                {newWorkoutForm.exercises.map((ex, idx) => (
-                  <div key={idx} className="p-2.5 bg-[#080c16] border border-slate-800 rounded-2xl space-y-2 text-xs">
-                    <div className="flex gap-2">
-                      <input 
-                        required 
-                        type="text" 
-                        placeholder="Nome do Exercício (ex: Hack Squat)" 
-                        value={ex.name} 
-                        onChange={e => handleExerciseChange(idx, 'name', e.target.value)} 
-                        className="flex-1 p-2 bg-[#0e1422] border border-slate-800 rounded-xl text-xs text-white font-bold" 
-                      />
+            {/* METAS BIOMÉTRICAS & DIETA CIENTÍFICA */}
+            <div className="bg-[#0e1422]/90 backdrop-blur-md p-5 rounded-3xl border border-emerald-800/50 shadow-xl space-y-4">
+              <h3 className="text-sm font-bold text-white uppercase tracking-wide border-b border-slate-800 pb-2">
+                2. Dieta & Metas de Macronutrientes (Mifflin-St Jeor)
+              </h3>
+              
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="p-3 bg-[#080c16] rounded-2xl border border-slate-800">
+                  <span className="text-[9px] text-slate-400 uppercase font-bold block">TMB (Basal)</span>
+                  <span className="text-lg font-black text-indigo-400">{calcResults.tmb} kcal</span>
+                </div>
+                <div className="p-3 bg-[#080c16] rounded-2xl border border-slate-800">
+                  <span className="text-[9px] text-slate-400 uppercase font-bold block">GET Total</span>
+                  <span className="text-lg font-black text-blue-400">{calcResults.get} kcal</span>
+                </div>
+                <div className="p-3 bg-[#080c16] rounded-2xl border border-slate-800">
+                  <span className="text-[9px] text-slate-400 uppercase font-bold block">Meta Calórica</span>
+                  <span className="text-lg font-black text-emerald-400">{calcResults.targetCalories} kcal</span>
+                </div>
+                <div className="p-3 bg-[#080c16] rounded-2xl border border-slate-800">
+                  <span className="text-[9px] text-slate-400 uppercase font-bold block">Hidratação</span>
+                  <span className="text-lg font-black text-cyan-400">{(calcResults.hydrationMl / 1000).toFixed(1)} L/dia</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3 pt-2">
+                <div className="p-3 bg-[#080c16] rounded-2xl border border-slate-800 text-center">
+                  <span className="text-[10px] text-rose-400 font-bold block">🍗 Proteínas</span>
+                  <span className="text-xl font-extrabold text-white">{calcResults.proteinG}g</span>
+                </div>
+                <div className="p-3 bg-[#080c16] rounded-2xl border border-slate-800 text-center">
+                  <span className="text-[10px] text-amber-400 font-bold block">🍚 Carboidratos</span>
+                  <span className="text-xl font-extrabold text-white">{calcResults.carbsG}g</span>
+                </div>
+                <div className="p-3 bg-[#080c16] rounded-2xl border border-slate-800 text-center">
+                  <span className="text-[10px] text-emerald-400 font-bold block">🥑 Gorduras</span>
+                  <span className="text-xl font-extrabold text-white">{calcResults.fatG}g</span>
+                </div>
+              </div>
+
+              <button 
+                onClick={handleSaveStudentDiet} 
+                className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-bold shadow-lg transition"
+              >
+                💾 Gravar Metas Nutricionais & Biometria do Aluno
+              </button>
+            </div>
+
+            {/* PRESCRIÇÃO DE TREINOS COM PSE (BORG 0-10) */}
+            <div className="bg-[#0e1422]/90 backdrop-blur-md p-5 rounded-3xl border border-slate-800/80 shadow-xl space-y-4">
+              <h3 className="text-sm font-bold text-white uppercase tracking-wide border-b border-slate-800 pb-2">
+                3. Prescrição de Ficha de Treino (Intensidade por PSE Borg 0-10)
+              </h3>
+
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold text-slate-300 uppercase">Fichas de Treino Gravadas ({studentWorkoutsList.length})</h4>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {studentWorkoutsList.map(w => (
+                    <div key={w.id} className="p-3 bg-[#080c16] rounded-2xl border border-slate-800 flex justify-between items-center text-xs">
+                      <div>
+                        <span className="font-bold text-white block">{w.day_label}</span>
+                        <span className="text-slate-400 text-[10px]">{w.exercises?.length || 0} exercícios cadastrados</span>
+                      </div>
                       <button 
-                        type="button" 
-                        onClick={() => handleRemoveExerciseRow(idx)} 
-                        className="text-rose-400 font-bold px-2"
+                        onClick={() => handleDeleteWorkoutFromStudent(w.id)}
+                        className="text-rose-400 font-bold text-xs hover:underline"
                       >
-                        ✕
+                        🗑️ Remover
                       </button>
                     </div>
+                  ))}
+                  {studentWorkoutsList.length === 0 && (
+                    <p className="text-slate-500 text-xs py-2 italic">Nenhuma ficha prescrita para este aluno ainda.</p>
+                  )}
+                </div>
+              </div>
 
-                    <div className="grid grid-cols-4 gap-1.5">
-                      <div>
-                        <label className="text-[9px] text-slate-400 block">Séries</label>
+              <form onSubmit={handleSaveWorkoutToStudent} className="space-y-3 pt-3 border-t border-slate-800">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-300 block mb-1">Dia / Título da Ficha</label>
+                    <input 
+                      required 
+                      type="text" 
+                      placeholder="Ex: Treino A - Peito e Tríceps" 
+                      value={newWorkoutForm.day_label} 
+                      onChange={e => setNewWorkoutForm({ ...newWorkoutForm, day_label: e.target.value })} 
+                      className="w-full p-2 bg-[#080c16] border border-slate-800 rounded-xl text-xs text-white" 
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-300 block mb-1">Observações</label>
+                    <input 
+                      type="text" 
+                      placeholder="Ex: Controlar a cadência na fase excêntrica" 
+                      value={newWorkoutForm.observations} 
+                      onChange={e => setNewWorkoutForm({ ...newWorkoutForm, observations: e.target.value })} 
+                      className="w-full p-2 bg-[#080c16] border border-slate-800 rounded-xl text-xs text-white" 
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-bold text-slate-300 uppercase">Exercícios e Cargas Target</label>
+                    <button 
+                      type="button" 
+                      onClick={handleAddExerciseRow} 
+                      className="text-[10px] font-bold text-blue-400 underline"
+                    >
+                      + Exercício
+                    </button>
+                  </div>
+
+                  {newWorkoutForm.exercises.map((ex, idx) => (
+                    <div key={idx} className="p-3 bg-[#080c16] border border-slate-800 rounded-2xl space-y-2 text-xs">
+                      <div className="flex gap-2">
                         <input 
-                          type="number" 
-                          value={ex.sets} 
-                          onChange={e => handleExerciseChange(idx, 'sets', e.target.value)} 
-                          className="w-full p-1.5 bg-[#0e1422] border border-slate-800 rounded-lg text-center text-xs text-white font-bold" 
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[9px] text-slate-400 block">Reps</label>
-                        <input 
+                          required 
                           type="text" 
-                          value={ex.reps} 
-                          onChange={e => handleExerciseChange(idx, 'reps', e.target.value)} 
-                          className="w-full p-1.5 bg-[#0e1422] border border-slate-800 rounded-lg text-center text-xs text-white font-bold" 
+                          placeholder="Exercício (Ex: Supino Reto)" 
+                          value={ex.name} 
+                          onChange={e => handleExerciseChange(idx, 'name', e.target.value)} 
+                          className="flex-1 p-2 bg-[#0e1422] border border-slate-800 rounded-xl text-xs text-white font-bold" 
                         />
+                        <button 
+                          type="button" 
+                          onClick={() => handleRemoveExerciseRow(idx)} 
+                          className="text-rose-400 font-bold px-2"
+                        >
+                          ✕
+                        </button>
                       </div>
-                      <div>
-                        <label className="text-[9px] text-slate-400 block">Carga Alvo</label>
-                        <input 
-                          type="text" 
-                          value={ex.load} 
-                          onChange={e => handleExerciseChange(idx, 'load', e.target.value)} 
-                          className="w-full p-1.5 bg-[#0e1422] border border-slate-800 rounded-lg text-center text-xs text-emerald-400 font-bold" 
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[9px] text-slate-400 block">Vídeo URL</label>
-                        <input 
-                          type="text" 
-                          placeholder="Link" 
-                          value={ex.video_url} 
-                          onChange={e => handleExerciseChange(idx, 'video_url', e.target.value)} 
-                          className="w-full p-1.5 bg-[#0e1422] border border-slate-800 rounded-lg text-xs text-white" 
-                        />
+
+                      <div className="grid grid-cols-4 gap-2">
+                        <div>
+                          <label className="text-[9px] text-slate-400 block">Séries</label>
+                          <input 
+                            type="number" 
+                            value={ex.sets} 
+                            onChange={e => handleExerciseChange(idx, 'sets', e.target.value)} 
+                            className="w-full p-1.5 bg-[#0e1422] border border-slate-800 rounded-lg text-center text-xs text-white font-bold" 
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[9px] text-slate-400 block">Reps</label>
+                          <input 
+                            type="text" 
+                            value={ex.reps} 
+                            onChange={e => handleExerciseChange(idx, 'reps', e.target.value)} 
+                            className="w-full p-1.5 bg-[#0e1422] border border-slate-800 rounded-lg text-center text-xs text-white font-bold" 
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[9px] text-slate-400 block">PSE (Borg 0-10)</label>
+                          <input 
+                            type="number" 
+                            min="1" 
+                            max="10" 
+                            value={ex.rpe} 
+                            onChange={e => handleExerciseChange(idx, 'rpe', e.target.value)} 
+                            className="w-full p-1.5 bg-[#0e1422] border border-slate-800 rounded-lg text-center text-xs text-amber-400 font-bold" 
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[9px] text-slate-400 block">Descanso (s)</label>
+                          <input 
+                            type="number" 
+                            value={ex.restSec} 
+                            onChange={e => handleExerciseChange(idx, 'restSec', e.target.value)} 
+                            className="w-full p-1.5 bg-[#0e1422] border border-slate-800 rounded-lg text-center text-xs text-white" 
+                          />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
 
-              <button type="submit" className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl text-xs font-bold shadow-lg shadow-indigo-600/30 transition">
-                ✓ Salvar Ficha de Treino para o Aluno
-              </button>
-            </form>
-
-            {/* SEÇÃO METAS / DIETA */}
-            <form onSubmit={handleSaveStudentDiet} className="space-y-3 pt-3 border-t border-slate-800">
-              <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">🥗 Metas de Água & Macronutrientes (Dieta)</h4>
-              
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-300 block mb-1">Meta de Água (L/dia)</label>
-                  <input 
-                    type="number" 
-                    step="0.05" 
-                    value={studentDiet.water_target_liters} 
-                    onChange={e => setStudentDiet({ ...studentDiet, water_target_liters: e.target.value })} 
-                    className="w-full p-2 bg-[#080c16] border border-slate-800 rounded-xl text-xs text-white font-bold" 
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-300 block mb-1">Calorias Alvo (kcal)</label>
-                  <input 
-                    type="number" 
-                    value={studentDiet.calories_target} 
-                    onChange={e => setStudentDiet({ ...studentDiet, calories_target: e.target.value })} 
-                    className="w-full p-2 bg-[#080c16] border border-slate-800 rounded-xl text-xs text-white font-bold" 
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="text-[10px] font-bold text-blue-400 block mb-1">Proteínas (g)</label>
-                  <input 
-                    type="number" 
-                    value={studentDiet.protein_g} 
-                    onChange={e => setStudentDiet({ ...studentDiet, protein_g: e.target.value })} 
-                    className="w-full p-2 bg-[#080c16] border border-slate-800 rounded-xl text-xs text-white font-bold" 
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-amber-400 block mb-1">Carbos (g)</label>
-                  <input 
-                    type="number" 
-                    value={studentDiet.carbs_g} 
-                    onChange={e => setStudentDiet({ ...studentDiet, carbs_g: e.target.value })} 
-                    className="w-full p-2 bg-[#080c16] border border-slate-800 rounded-xl text-xs text-white font-bold" 
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-rose-400 block mb-1">Gordura (g)</label>
-                  <input 
-                    type="number" 
-                    value={studentDiet.fat_g} 
-                    onChange={e => setStudentDiet({ ...studentDiet, fat_g: e.target.value })} 
-                    className="w-full p-2 bg-[#080c16] border border-slate-800 rounded-xl text-xs text-white font-bold" 
-                  />
-                </div>
-              </div>
-
-              <button type="submit" className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-bold shadow-lg shadow-emerald-600/30 transition">
-                ✓ Atualizar Metas de Água/Macros
-              </button>
-            </form>
+                <button type="submit" className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl text-xs font-bold shadow-lg transition">
+                  ✓ Salvar Ficha de Treino para o Aluno
+                </button>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+      </main>
 
       {/* MODAL DE NOTIFICAÇÕES */}
       {showNotificationModal && (
@@ -2768,6 +2904,12 @@ export default function App() {
           👥 <span className="text-[10px]">Alunos</span>
         </button>
         <button 
+          onClick={() => setActiveTab('prescricao')} 
+          className={`flex flex-col items-center gap-1 p-1.5 transition ${activeTab === 'prescricao' ? 'text-indigo-400 font-bold scale-105' : 'text-slate-500 hover:text-slate-300'}`}
+        >
+          📋 <span className="text-[10px]">Prescrição</span>
+        </button>
+        <button 
           onClick={() => setActiveTab('financeiro')} 
           className={`flex flex-col items-center gap-1 p-1.5 transition ${activeTab === 'financeiro' ? 'text-blue-400 font-bold scale-105' : 'text-slate-500 hover:text-slate-300'}`}
         >
@@ -2777,9 +2919,10 @@ export default function App() {
           onClick={() => setActiveTab('marketing')} 
           className={`flex flex-col items-center gap-1 p-1.5 transition ${activeTab === 'marketing' ? 'text-amber-400 font-bold scale-105' : 'text-slate-500 hover:text-slate-300'}`}
         >
-          🚀 <span className="text-[10px]">Marketing</span>
+          🚀 <span className="text-[10px]">Ofertas</span>
         </button>
       </nav>
+
     </div>
   );
 }
